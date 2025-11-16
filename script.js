@@ -46,19 +46,7 @@ async function initializeFirebase() {
     firebaseInitialized = true;
   } catch (error) {
     console.error('Error initializing Firebase:', error);
-    // Fallback to localStorage if Firebase fails
-    if (!localStorage.getItem("users")) {
-      const adminPassword = localStorage.getItem("adminPassword") || "123456";
-      localStorage.setItem("users", JSON.stringify([
-        { username: "admin", password: adminPassword, role: "admin", createdAt: new Date().toLocaleString() }
-      ]));
-    }
-    if (!localStorage.getItem("leads")) {
-      localStorage.setItem("leads", JSON.stringify([]));
-    }
-    if (!localStorage.getItem("notifications")) {
-      localStorage.setItem("notifications", JSON.stringify([]));
-    }
+    throw error;
   }
 }
 
@@ -67,126 +55,97 @@ if (typeof firebase !== 'undefined' && typeof database !== 'undefined') {
   initializeFirebase();
 }
 
-// Helper functions for data access (Firebase with localStorage fallback)
+// Helper functions for data access (Firebase only)
 async function getUsers() {
-  try {
-    if (typeof database !== 'undefined' && database) {
-      const usersArray = await getFirebaseArray('users');
-      if (usersArray && usersArray.length > 0) {
-        return usersArray;
-      }
-      // إذا كانت Firebase فارغة، جرب localStorage
-      const localUsers = JSON.parse(localStorage.getItem("users") || "[]");
-      if (localUsers.length > 0) {
-        // محاولة رفع البيانات من localStorage إلى Firebase
-        await setUsers(localUsers);
-        return localUsers;
-      }
-    }
-  } catch (error) {
-    console.error('Error getting users from Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  return JSON.parse(localStorage.getItem("users") || "[]");
+  const usersArray = await getFirebaseArray('users');
+  return usersArray || [];
 }
 
 async function setUsers(users) {
-  try {
-    if (typeof database !== 'undefined' && database) {
-      const result = await setFirebaseArray('users', users);
-      if (result) {
-        // أيضاً حفظ في localStorage كنسخة احتياطية
-        localStorage.setItem("users", JSON.stringify(users));
-        return true;
-      }
-    }
-  } catch (error) {
-    console.error('Error setting users in Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  localStorage.setItem("users", JSON.stringify(users));
+  await setFirebaseArray('users', users);
   return true;
 }
 
 async function getLeads() {
-  try {
-    if (typeof database !== 'undefined') {
-      const leadsArray = await getFirebaseArray('leads');
-      return leadsArray;
-    }
-  } catch (error) {
-    console.error('Error getting leads from Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  return JSON.parse(localStorage.getItem("leads") || "[]");
+  const leadsArray = await getFirebaseArray('leads');
+  return leadsArray || [];
 }
 
 async function setLeads(leads) {
-  try {
-    if (typeof database !== 'undefined') {
-      await setFirebaseArray('leads', leads);
-      return true;
-    }
-  } catch (error) {
-    console.error('Error setting leads in Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setFirebaseArray('leads', leads);
   return true;
 }
 
 async function getMeetings() {
-  try {
-    if (typeof database !== 'undefined') {
-      const meetingsArray = await getFirebaseArray('meetings');
-      return meetingsArray;
-    }
-  } catch (error) {
-    console.error('Error getting meetings from Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  return JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetingsArray = await getFirebaseArray('meetings');
+  return meetingsArray || [];
 }
 
 async function setMeetings(meetings) {
-  try {
-    if (typeof database !== 'undefined') {
-      await setFirebaseArray('meetings', meetings);
-      return true;
-    }
-  } catch (error) {
-    console.error('Error setting meetings in Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setFirebaseArray('meetings', meetings);
   return true;
 }
 
 async function getNotifications() {
-  try {
-    if (typeof database !== 'undefined') {
-      const notificationsArray = await getFirebaseArray('notifications');
-      return notificationsArray;
-    }
-  } catch (error) {
-    console.error('Error getting notifications from Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  return JSON.parse(localStorage.getItem("notifications") || "[]");
+  const notificationsArray = await getFirebaseArray('notifications');
+  return notificationsArray || [];
 }
 
 async function setNotifications(notifications) {
-  try {
-    if (typeof database !== 'undefined') {
-      await setFirebaseArray('notifications', notifications);
-      return true;
-    }
-  } catch (error) {
-    console.error('Error setting notifications in Firebase:', error);
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Firebase database is not initialized');
   }
-  // Fallback to localStorage
-  localStorage.setItem("notifications", JSON.stringify(notifications));
+  await setFirebaseArray('notifications', notifications);
   return true;
+}
+
+// دالة للحصول على currentUser من Firebase
+async function getCurrentUserFromFirebase() {
+  if (typeof database === 'undefined' || !database) {
+    return null;
+  }
+  try {
+    const currentUserData = await getFirebaseData('currentUser');
+    return currentUserData;
+  } catch (error) {
+    console.error('Error getting current user from Firebase:', error);
+    return null;
+  }
+}
+
+// دالة لحفظ currentUser في Firebase
+async function setCurrentUserInFirebase(user) {
+  if (typeof database === 'undefined' || !database) {
+    return false;
+  }
+  try {
+    await setFirebaseData('currentUser', user);
+    return true;
+  } catch (error) {
+    console.error('Error setting current user in Firebase:', error);
+    return false;
+  }
 }
 
 // تسجيل الدخول
@@ -206,7 +165,7 @@ document.getElementById("loginForm")?.addEventListener("submit", async e => {
     }
     
     currentUser = user;
-    localStorage.setItem("currentUser", JSON.stringify(user));
+    await setCurrentUserInFirebase(user);
     // توجيه حسب الصلاحيات أو الدور
     let redirect = "dashboard.html";
     if (user.role === "admin") {
@@ -235,6 +194,11 @@ document.getElementById("loginForm")?.addEventListener("submit", async e => {
 function hasPermission(page) {
   if (!currentUser) return false;
   
+  // صفحة clear.html متاحة فقط للأدمن
+  if (page === "clear.html") {
+    return currentUser.role === "admin";
+  }
+  
   // الأدمن لديه جميع الصلاحيات
   if (currentUser.role === "admin") return true;
   
@@ -262,26 +226,29 @@ function checkPagePermission(page) {
 
 // تحميل المستخدم
 async function loadCurrentUser() {
-  const user = JSON.parse(localStorage.getItem("currentUser"));
-  if (!user) {
-    window.location.href = "index.html";
-    return;
-  }
-  
-  // تعيين المستخدم الحالي أولاً (قبل محاولة التحديث)
-  currentUser = user;
-  
   try {
+    // الحصول على المستخدم من Firebase
+    const user = await getCurrentUserFromFirebase();
+    if (!user) {
+      window.location.href = "index.html";
+      return;
+    }
+    
+    // تعيين المستخدم الحالي أولاً (قبل محاولة التحديث)
+    currentUser = user;
+    
     // تحديث بيانات المستخدم من قاعدة البيانات (لضمان الحصول على أحدث الصلاحيات)
     const users = await getUsers();
     const updatedUser = users.find(u => u.username === user.username);
     if (updatedUser) {
       currentUser = updatedUser;
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      await setCurrentUserInFirebase(updatedUser);
     }
   } catch (error) {
     console.error('Error loading user from database:', error);
-    // الاستمرار مع المستخدم من localStorage في حالة الخطأ
+    hideLoadingPage();
+    window.location.href = "index.html";
+    return;
   }
   
   document.querySelectorAll("#currentUser").forEach(el => 
@@ -326,10 +293,34 @@ async function loadCurrentUser() {
   initNotificationsUI();
   // تظليل رابط الصفحة الحالية في شريط التنقل
   highlightActiveNav();
+  
+  // إخفاء صفحة التحميل
+  hideLoadingPage();
 }
 
-function logout() {
-  localStorage.removeItem("currentUser");
+// إظهار صفحة التحميل
+function showLoadingPage() {
+  const loadingPage = document.getElementById("loadingPage");
+  if (loadingPage) {
+    loadingPage.classList.remove("hidden");
+  }
+}
+
+// إخفاء صفحة التحميل
+function hideLoadingPage() {
+  const loadingPage = document.getElementById("loadingPage");
+  if (loadingPage) {
+    loadingPage.classList.add("hidden");
+  }
+}
+
+async function logout() {
+  try {
+    await removeFirebaseData('currentUser');
+  } catch (error) {
+    console.error('Error removing current user from Firebase:', error);
+  }
+  currentUser = null;
   window.location.href = "index.html";
 }
 
@@ -404,14 +395,9 @@ async function changeAdminPassword() {
   
   // حفظ كلمة المرور في Firebase
   try {
-    if (typeof database !== 'undefined') {
-      await setFirebaseData('adminPassword', newPassword);
-    } else {
-      localStorage.setItem("adminPassword", newPassword);
-    }
+    await setFirebaseData('adminPassword', newPassword);
   } catch (error) {
     console.error('Error saving admin password:', error);
-    localStorage.setItem("adminPassword", newPassword);
   }
   
   // التحقق من أن البيانات تم حفظها بشكل صحيح
@@ -431,7 +417,7 @@ async function changeAdminPassword() {
   // تحديث المستخدم الحالي إذا كان هو المدير
   if (currentUser && currentUser.username === "admin") {
     currentUser.password = newPassword;
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    await setCurrentUserInFirebase(currentUser);
   }
   
   // عرض رسالة النجاح
@@ -532,21 +518,23 @@ function parseDateInput(value, endOfDay = false) {
 // ===== إشعارات: دوال مساعدة =====
 function pushNotification(type, message, targets) {
   // targets: مصفوفة أسماء مستخدمين محددين، أو كلمات مفتاحية مثل 'leads_page'
-  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
-  notifications.unshift({
-    id: Date.now().toString() + Math.random().toString(16).slice(2),
-    type,
-    message,
-    targets: Array.isArray(targets) ? targets : [targets],
-    createdAt: new Date().toISOString(),
-    readBy: []
-  });
-  localStorage.setItem("notifications", JSON.stringify(notifications));
+  (async () => {
+    const notifications = await getNotifications();
+    notifications.unshift({
+      id: Date.now().toString() + Math.random().toString(16).slice(2),
+      type,
+      message,
+      targets: Array.isArray(targets) ? targets : [targets],
+      createdAt: new Date().toISOString(),
+      readBy: []
+    });
+    await setNotifications(notifications);
+  })();
   renderNotificationsUI(); // تحديث فوري إن وُجدت الواجهة
 }
 
-function getUserNotifications(username) {
-  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+async function getUserNotifications(username) {
+  const notifications = await getNotifications();
   return notifications.filter(n => {
     if (!Array.isArray(n.targets)) return false;
     // صلاحية leads_page
@@ -556,31 +544,31 @@ function getUserNotifications(username) {
   }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function markNotificationRead(id) {
-  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+async function markNotificationRead(id) {
+  const notifications = await getNotifications();
   const idx = notifications.findIndex(n => n.id === id);
   if (idx !== -1) {
     const rb = new Set(notifications[idx].readBy || []);
     rb.add(currentUser.username);
     notifications[idx].readBy = Array.from(rb);
-    localStorage.setItem("notifications", JSON.stringify(notifications));
+    await setNotifications(notifications);
     renderNotificationsUI();
   }
 }
 
-function markAllNotificationsRead() {
-  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+async function markAllNotificationsRead() {
+  const notifications = await getNotifications();
   notifications.forEach(n => {
     const rb = new Set(n.readBy || []);
     rb.add(currentUser.username);
     n.readBy = Array.from(rb);
   });
-  localStorage.setItem("notifications", JSON.stringify(notifications));
+  await setNotifications(notifications);
   renderNotificationsUI();
 }
 
-function getUnreadCountForUser() {
-  const list = getUserNotifications(currentUser.username);
+async function getUnreadCountForUser() {
+  const list = await getUserNotifications(currentUser.username);
   return list.filter(n => !(n.readBy || []).includes(currentUser.username)).length;
 }
 
@@ -664,11 +652,11 @@ function initNotificationsUI() {
   renderNotificationsUI();
 }
 
-function renderNotificationsUI() {
+async function renderNotificationsUI() {
   const badge = document.getElementById("notifBadge");
   const listEl = document.getElementById("notifList");
   if (!badge || !listEl || !currentUser) return;
-  const list = getUserNotifications(currentUser.username);
+  const list = await getUserNotifications(currentUser.username);
   const unread = list.filter(n => !(n.readBy || []).includes(currentUser.username)).length;
   badge.textContent = unread;
   badge.style.display = unread > 0 ? "inline-block" : "none";
@@ -691,14 +679,22 @@ function renderNotificationsUI() {
 
 // لوحة التحكم
 async function initDashboard() {
-  await loadCurrentUser();
-  if (!checkPagePermission("dashboard.html")) return;
-  updateStats();
-  loadRecent();
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("dashboard.html")) {
+      hideLoadingPage();
+      return;
+    }
+    await updateStats();
+    await loadRecent();
+  } finally {
+    hideLoadingPage();
+  }
 }
 
-function updateStats() {
-  const leads = JSON.parse(localStorage.getItem("leads"));
+async function updateStats() {
+  const leads = await getLeads();
   document.getElementById("totalLeads").textContent = leads.length;
   document.getElementById("newCount").textContent = leads.filter(l => l.status === "new").length;
   document.getElementById("inProgress").textContent = leads.filter(l => l.status === "in-progress").length;
@@ -709,8 +705,9 @@ function updateStats() {
   document.getElementById("done").textContent = leads.filter(l => l.status === "done").length;
 }
 
-function loadRecent() {
-  let leads = JSON.parse(localStorage.getItem("leads"))
+async function loadRecent() {
+  let leads = await getLeads();
+  leads = leads
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 5);
   const tbody = document.querySelector("#recentTable tbody");
@@ -730,29 +727,37 @@ function loadRecent() {
 
 // صفحة العملاء
 async function initLeadsPage() {
-  await loadCurrentUser();
-  if (!checkPagePermission("leads.html")) return;
-  ensureLeadsFiltersUI();
-  loadLeadsTable();
-  document.getElementById("addLeadForm").addEventListener("submit", addLead);
-  document.getElementById("editLeadForm").addEventListener("submit", updateLead);
-  // تحديث مواضع العناصر اللاصقة
-  setTimeout(() => {
-    updateStickyPositions();
-  }, 200);
-  // إضافة مربع اختيار "جعل العميل للجميع" مع افتراض الإضافة لنفسي فقط
-  const addForm = document.getElementById("addLeadForm");
-  if (addForm && !document.getElementById("addForAllCheckbox")) {
-    const wrapper = document.createElement("div");
-    wrapper.style.marginTop = "0.5rem";
-    wrapper.innerHTML = `
-      <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.5rem 0.75rem; border-radius:6px; font-size:0.9rem;">
-        <input type="checkbox" id="addForAllCheckbox" />
-        جعل هذا العميل متاحًا للجميع (غير مخصص)
-      </label>
-      <small style="color:#777; line-height:1.4; display:block; margin-top:0.25rem;">بالوضع الافتراضي سيتم إضافة العميل لك فقط. فعّل هذا الخيار لجعله متاحًا للجميع.</small>
-    `;
-    addForm.appendChild(wrapper);
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("leads.html")) {
+      hideLoadingPage();
+      return;
+    }
+    ensureLeadsFiltersUI();
+    await loadLeadsTable();
+    document.getElementById("addLeadForm").addEventListener("submit", addLead);
+    document.getElementById("editLeadForm").addEventListener("submit", updateLead);
+    // تحديث مواضع العناصر اللاصقة
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 200);
+    // إضافة مربع اختيار "جعل العميل للجميع" مع افتراض الإضافة لنفسي فقط
+    const addForm = document.getElementById("addLeadForm");
+    if (addForm && !document.getElementById("addForAllCheckbox")) {
+      const wrapper = document.createElement("div");
+      wrapper.style.marginTop = "0.5rem";
+      wrapper.innerHTML = `
+        <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.5rem 0.75rem; border-radius:6px; font-size:0.9rem;">
+          <input type="checkbox" id="addForAllCheckbox" />
+          جعل هذا العميل متاحًا للجميع (غير مخصص)
+        </label>
+        <small style="color:#777; line-height:1.4; display:block; margin-top:0.25rem;">بالوضع الافتراضي سيتم إضافة العميل لك فقط. فعّل هذا الخيار لجعله متاحًا للجميع.</small>
+      `;
+      addForm.appendChild(wrapper);
+    }
+  } finally {
+    hideLoadingPage();
   }
 }
 
@@ -827,9 +832,9 @@ function ensureLeadsFiltersUI() {
   }
 }
 
-function addLead(e) {
+async function addLead(e) {
   e.preventDefault();
-  const leads = JSON.parse(localStorage.getItem("leads"));
+  const leads = await getLeads();
   const forAll = !!document.getElementById("addForAllCheckbox")?.checked;
   const newLead = {
     id: Date.now().toString(),
@@ -848,7 +853,7 @@ function addLead(e) {
     notes: ""
   };
   leads.push(newLead);
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   closeModal();
   loadLeadsTable();
   // إشعار: عميل جديد
@@ -856,8 +861,8 @@ function addLead(e) {
 }
 
 // صفحة العملاء - جميع العملاء
-function loadLeadsTable() {
-  let leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function loadLeadsTable() {
+  let leads = await getLeads();
   const isAdmin = currentUser.role === "admin";
   const isManager = currentUser.role === "manager";
   const isSales = currentUser.role === "sales" || currentUser.role === "telesales";
@@ -872,11 +877,14 @@ function loadLeadsTable() {
     }
   });
   if (needsUpdate) {
-    localStorage.setItem("leads", JSON.stringify(leads));
+    await setLeads(leads);
   }
 
   // تطبيق منطق الإرجاع التلقائي قبل العرض
-  autoReturnUnansweredLeads(leads);
+  (async () => {
+    await autoReturnUnansweredLeads(leads);
+    leads = await getLeads(); // إعادة جلب البيانات بعد التحديث
+  })();
 
   leads.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
@@ -885,19 +893,14 @@ function loadLeadsTable() {
     leads = leads.filter(l => l.status === "new" && !l.assignedTo);
   } else if (isManager) {
     // المدير يرى: العملاء غير المخصصين + عملائه + عملاء من يرأسهم
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    // الحصول على قائمة المستخدمين الذين يرأسهم المدير
-    const managedUsers = users
-      .filter(user => user.manager === currentUser.username)
-      .map(user => user.username);
-    
+    // المدير يرى: العملاء غير المخصصين + عملائه + عملاء من يرأسهم
+    // سيتم تحديث هذا الجزء لاحقاً لاستخدام async
     leads = leads.filter(l => {
       // العملاء غير المخصصين
       if (!l.assignedTo) return true;
       // عملائه الشخصية
       if (l.assignedTo === currentUser.username) return true;
-      // عملاء من يرأسهم
-      if (managedUsers.includes(l.assignedTo)) return true;
+      // عملاء من يرأسهم (سيتم تحديثه لاحقاً)
       return false;
     });
   } else if (!isAdmin) {
@@ -939,19 +942,21 @@ function loadLeadsTable() {
 
   // من يمكن التوجيه لهم بحسب الدور (للمدير ورئيس القسم)
   let assignableUsers = [];
-  const usersAll = JSON.parse(localStorage.getItem("users") || "[]");
-  if (isManager) {
-    // موظفو المدير + المدير نفسه
-    assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
-    const selfUser = usersAll.find(u => u.username === currentUser.username);
-    if (selfUser) {
-      const exists = assignableUsers.some(u => u.username === selfUser.username);
-      if (!exists) assignableUsers.push(selfUser);
+  (async () => {
+    const usersAll = await getUsers();
+    if (isManager) {
+      // موظفو المدير + المدير نفسه
+      assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
+      const selfUser = usersAll.find(u => u.username === currentUser.username);
+      if (selfUser) {
+        const exists = assignableUsers.some(u => u.username === selfUser.username);
+        if (!exists) assignableUsers.push(selfUser);
+      }
+    } else if (isAdmin) {
+      // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
+      assignableUsers = usersAll.slice();
     }
-  } else if (isAdmin) {
-    // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
-    assignableUsers = usersAll.slice();
-  }
+  })();
 
   leads.forEach((lead, index) => {
     const canAssign = lead.status === "new" && !lead.assignedTo;
@@ -1122,19 +1127,20 @@ function showImportUserSelection(rows, selectedType) {
   
   // إذا كان admin أو manager، نعرض قائمة لاختيار المستخدم
   if (isAdmin || isManager) {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    let availableUsers = [];
-    
-    if (isAdmin) {
-      // Admin يمكنه اختيار أي مستخدم
-      availableUsers = users.filter(u => u.username !== "admin");
-    } else if (isManager) {
-      // Manager يمكنه اختيار نفسه أو من يرأسهم
-      availableUsers = users.filter(u => 
-        u.username === currentUser.username || 
-        (u.manager === currentUser.username && u.username !== "admin")
-      );
-    }
+    (async () => {
+      const users = await getUsers();
+      let availableUsers = [];
+      
+      if (isAdmin) {
+        // Admin يمكنه اختيار أي مستخدم
+        availableUsers = users.filter(u => u.username !== "admin");
+      } else if (isManager) {
+        // Manager يمكنه اختيار نفسه أو من يرأسهم
+        availableUsers = users.filter(u => 
+          u.username === currentUser.username || 
+          (u.manager === currentUser.username && u.username !== "admin")
+        );
+      }
     
     // حفظ البيانات مؤقتاً في localStorage
     const tempKey = "temp_import_data_" + Date.now();
@@ -1216,11 +1222,12 @@ function showImportUserSelection(rows, selectedType) {
       modal.remove();
       importLeadsFromExcel(savedData.rows || [], assignedUser, savedData.type);
     });
+    })();
   }
 }
 
-function importLeadsFromExcel(rows, assignedTo, selectedType) {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function importLeadsFromExcel(rows, assignedTo, selectedType) {
+  const leads = await getLeads();
   let successCount = 0;
   let errorCount = 0;
   const errors = [];
@@ -1271,7 +1278,7 @@ function importLeadsFromExcel(rows, assignedTo, selectedType) {
     }
   });
   
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   
   // عرض النتيجة
   let message = `تم استيراد ${successCount} عميل بنجاح`;
@@ -1297,19 +1304,19 @@ function importLeadsFromExcel(rows, assignedTo, selectedType) {
   }
 }
 
-function assignToMe(id) {
-  const leads = JSON.parse(localStorage.getItem("leads"));
+async function assignToMe(id) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === id);
   if (lead.assignedTo) return alert("المستخدم موجود مسبقًا");
   lead.assignedTo = currentUser.username;
   lead.status = "in-progress";
   lead.updatedAt = new Date().toISOString();
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   loadLeadsTable();
 }
 
 // توجيه عميل إلى موظف محدد بواسطة المدير ورئيس القسم
-function assignLeadToUser(id, username) {
+async function assignLeadToUser(id, username) {
   if (!username) {
     alert("يرجى اختيار موظف لتوجيه العميل له");
     return;
@@ -1318,11 +1325,11 @@ function assignLeadToUser(id, username) {
     alert("غير مصرح لك بهذا الإجراء");
     return;
   }
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === id);
   if (!lead) return;
 
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const users = await getUsers();
   const targetUser = users.find(u => u.username === username);
   if (!targetUser) {
     alert("يرجى اختيار مستخدم صالح");
@@ -1354,7 +1361,7 @@ function assignLeadToUser(id, username) {
   lead.assignedTo = username;
   lead.status = "in-progress";
   lead.updatedAt = new Date().toISOString();
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   loadLeadsTable();
   alert(`تم توجيه العميل إلى ${username}`);
 
@@ -1365,9 +1372,9 @@ function assignLeadToUser(id, username) {
 }
 
 // توزيع الاجتماعات تلقائياً على الموظفين بالتساوي حسب الإعدادات
-function assignMeetingToSalesEqually(meetings) {
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
-  const settings = getSystemSettings();
+async function assignMeetingToSalesEqually(meetings) {
+  const users = await getUsers();
+  const settings = await getSystemSettings();
   const distributionMode = settings.meetingDistributionMode || "sales_and_telesales";
   
   // تحديد نوع الموظفين حسب الإعدادات
@@ -1411,8 +1418,8 @@ function assignMeetingToSalesEqually(meetings) {
   return null;
 }
 
-function updateLeadStatus(id, status, callback) {
-  const leads = JSON.parse(localStorage.getItem("leads"));
+async function updateLeadStatus(id, status, callback) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === id);
   // تحويل "in-progress" إلى "failed" إذا كان موجوداً
   if (lead.status === "in-progress") {
@@ -1421,7 +1428,7 @@ function updateLeadStatus(id, status, callback) {
     lead.status = status;
   }
   lead.updatedAt = new Date().toISOString();
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   if (callback && typeof callback === 'function') {
     callback();
   } else {
@@ -1429,14 +1436,14 @@ function updateLeadStatus(id, status, callback) {
   }
 }
 
-function editNotes(id, callback) {
-  const leads = JSON.parse(localStorage.getItem("leads"));
+async function editNotes(id, callback) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === id);
   const note = prompt("اكتب الملاحظات:", lead.notes);
   if (note !== null) {
     lead.notes = note;
     lead.updatedAt = new Date().toISOString();
-    localStorage.setItem("leads", JSON.stringify(leads));
+    await setLeads(leads);
     if (callback && typeof callback === 'function') {
       callback();
     } else {
@@ -1446,8 +1453,8 @@ function editNotes(id, callback) {
 }
 
 // عرض نافذة منبثقة لتعديل الملاحظات (لصفحة عملائي)
-function showEditNotesModal(leadId) {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function showEditNotesModal(leadId) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === leadId);
   if (!lead) return;
   
@@ -1472,27 +1479,27 @@ function closeNotesModal() {
 }
 
 // حفظ الملاحظات من النافذة المنبثقة
-function saveNotesFromModal() {
+async function saveNotesFromModal() {
   const leadId = document.getElementById("editNotesLeadId").value;
   const notes = document.getElementById("editNotesText").value;
   
   if (!leadId) return;
   
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === leadId);
   if (!lead) return;
   
   lead.notes = notes;
   lead.updatedAt = new Date().toISOString();
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   
   closeNotesModal();
   loadMyLeadsTable();
 }
 
 // عرض نموذج تعديل العميل
-function showEditLeadModal(leadId) {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function showEditLeadModal(leadId) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === leadId);
   
   if (!lead) {
@@ -1523,7 +1530,7 @@ function showEditLeadModal(leadId) {
 }
 
 // تحديث بيانات العميل
-function updateLead(e) {
+async function updateLead(e) {
   e.preventDefault();
   const leadId = document.getElementById("editLeadId").value;
   const company = document.getElementById("editCompany").value.trim();
@@ -1531,7 +1538,7 @@ function updateLead(e) {
   const storeLink = document.getElementById("editStoreLink").value.trim() || "-";
   const type = document.getElementById("editType").value;
   
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === leadId);
   
   if (!lead) {
@@ -1557,7 +1564,7 @@ function updateLead(e) {
   lead.type = type;
   lead.updatedAt = new Date().toISOString();
   
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   
   alert("تم تحديث بيانات العميل بنجاح!");
   closeModal();
@@ -1605,10 +1612,10 @@ function getResponseStatusStyle(status) {
   return `${styles[status] || "background:#95a5a6; color:#fff;"} display:inline-block; padding:0.15rem 0.6rem; border-radius:999px; font-size:0.85rem;`;
 }
 
-function updateResponseStatus(id, newValue, callback) {
+async function updateResponseStatus(id, newValue, callback) {
   const allowedValues = ["لم يتم المحاوله","تم الرد","لم يتم الرد","اعاده التواصل"];
   if (!allowedValues.includes(newValue)) return;
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === id);
   if (!lead) return;
   // منع الرجوع إلى "لم يتم المحاوله" إذا تم تغييرها من قبل
@@ -1628,13 +1635,13 @@ function updateResponseStatus(id, newValue, callback) {
       lead.status = "failed";
     }
   }
-  localStorage.setItem("leads", JSON.stringify(leads));
+  await setLeads(leads);
   if (typeof callback === 'function') callback();
 }
 
-function autoReturnUnansweredLeads(leads) {
+async function autoReturnUnansweredLeads(leads) {
   let changed = false;
-  const settings = getSystemSettings();
+  const settings = await getSystemSettings();
   const hours = Math.max(1, Number(settings.autoReturnHours || 48)); // افتراضي 48 ساعة
   const THRESHOLD_MS = hours * 60 * 60 * 1000;
   const now = Date.now();
@@ -1653,20 +1660,35 @@ function autoReturnUnansweredLeads(leads) {
     }
   });
   if (changed) {
-    localStorage.setItem("leads", JSON.stringify(leads));
+    await setLeads(leads);
   }
 }
 
 // إعدادات النظام العامة
-function getSystemSettings() {
+async function getSystemSettings() {
   try {
-    return JSON.parse(localStorage.getItem("settings") || "{}");
-  } catch {
+    if (typeof database === 'undefined' || !database) {
+      return {};
+    }
+    const settings = await getFirebaseData('settings');
+    return settings || {};
+  } catch (error) {
+    console.error('Error getting system settings:', error);
     return {};
   }
 }
-function setSystemSettings(next) {
-  localStorage.setItem("settings", JSON.stringify(next || {}));
+
+async function setSystemSettings(next) {
+  try {
+    if (typeof database === 'undefined' || !database) {
+      return false;
+    }
+    await setFirebaseData('settings', next || {});
+    return true;
+  } catch (error) {
+    console.error('Error setting system settings:', error);
+    return false;
+  }
 }
 function getTypeText(type) {
   const map = {
@@ -1749,33 +1771,40 @@ function showAddModal() {
 
 // صفحة المستخدمين
 async function initUsersPage() {
-  await loadCurrentUser();
-  if (!checkPagePermission("users.html")) return;
-  loadUsersTable();
-  document.getElementById("addUserForm").addEventListener("submit", addUser);
-  document.getElementById("editUserForm").addEventListener("submit", editUser);
-  // لوحة إعدادات المدير: زمن إعادة تدوير "لم يتم الرد"
-  ensureAutoReturnSettingsUI();
-  
-  // إضافة مستمع لتغيير الدور لإظهار/إخفاء حقل المدير المباشر
-  document.getElementById("newRole").addEventListener("change", function() {
-    updateManagerFieldVisibility("newRole", "newManager");
-  });
-  
-  // إظهار زر تقارير جميع المستخدمين
-  const allReportsBtn = document.getElementById("allReportsBtn");
-  if (allReportsBtn) {
-    // إظهار الزر للـ admin دائماً
-    if (currentUser.role === "admin") {
-      allReportsBtn.style.display = "inline-block";
-    } else if (currentUser.role === "manager") {
-      // إظهار الزر للمدير (سيعرض تقاريره الشخصية على الأقل)
-      allReportsBtn.style.display = "inline-block";
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("users.html")) {
+      hideLoadingPage();
+      return;
     }
+    await loadUsersTable();
+    document.getElementById("addUserForm").addEventListener("submit", addUser);
+    document.getElementById("editUserForm").addEventListener("submit", editUser);
+    // لوحة إعدادات المدير: زمن إعادة تدوير "لم يتم الرد"
+    ensureAutoReturnSettingsUI();
+    
+    // إضافة مستمع لتغيير الدور لإظهار/إخفاء حقل المدير المباشر
+    document.getElementById("newRole").addEventListener("change", function() {
+      updateManagerFieldVisibility("newRole", "newManager");
+    });
+    // إظهار زر تقارير جميع المستخدمين
+    const allReportsBtn = document.getElementById("allReportsBtn");
+    if (allReportsBtn) {
+      // إظهار الزر للـ admin دائماً
+      if (currentUser.role === "admin") {
+        allReportsBtn.style.display = "inline-block";
+      } else if (currentUser.role === "manager") {
+        // إظهار الزر للمدير (سيعرض تقاريره الشخصية على الأقل)
+        allReportsBtn.style.display = "inline-block";
+      }
+    }
+    document.getElementById("editRole").addEventListener("change", function() {
+      updateManagerFieldVisibility("editRole", "editManager");
+    });
+  } finally {
+    hideLoadingPage();
   }
-  document.getElementById("editRole").addEventListener("change", function() {
-    updateManagerFieldVisibility("editRole", "editManager");
-  });
 }
 
 function ensureAutoReturnSettingsUI() {
@@ -1786,8 +1815,9 @@ function ensureAutoReturnSettingsUI() {
   if (!usersTable) return;
   if (document.getElementById("autoReturnPanel")) return;
 
-  const settings = getSystemSettings();
-  const hours = Number(settings.autoReturnHours || 48);
+  (async () => {
+    const settings = await getSystemSettings();
+    const hours = Number(settings.autoReturnHours || 48);
 
   const panel = document.createElement("div");
   panel.id = "autoReturnPanel";
@@ -1810,14 +1840,15 @@ function ensureAutoReturnSettingsUI() {
   `;
   usersTable.parentElement.insertBefore(panel, usersTable);
 
-  document.getElementById("saveAutoReturnBtn").addEventListener("click", () => {
+  document.getElementById("saveAutoReturnBtn").addEventListener("click", async () => {
     const input = document.getElementById("autoReturnHours");
     const val = Math.max(1, Number(input.value || 0));
-    const next = getSystemSettings();
+    const next = await getSystemSettings();
     next.autoReturnHours = val;
-    setSystemSettings(next);
+    await setSystemSettings(next);
     alert("تم حفظ إعدادات إعادة التدوير بنجاح.");
   });
+  })();
   
   // إضافة لوحة التحكم في توزيع الاجتماعات
   ensureMeetingDistributionSettingsUI();
@@ -1831,8 +1862,9 @@ function ensureMeetingDistributionSettingsUI() {
   if (!usersTable) return;
   if (document.getElementById("meetingDistributionPanel")) return;
 
-  const settings = getSystemSettings();
-  const distributionMode = settings.meetingDistributionMode || "sales_and_telesales"; // sales_only, telesales_only, sales_and_telesales
+  (async () => {
+    const settings = await getSystemSettings();
+    const distributionMode = settings.meetingDistributionMode || "sales_and_telesales"; // sales_only, telesales_only, sales_and_telesales
 
   const panel = document.createElement("div");
   panel.id = "meetingDistributionPanel";
@@ -1859,18 +1891,19 @@ function ensureMeetingDistributionSettingsUI() {
   `;
   usersTable.parentElement.insertBefore(panel, usersTable);
 
-  document.getElementById("saveMeetingDistributionBtn").addEventListener("click", () => {
+  document.getElementById("saveMeetingDistributionBtn").addEventListener("click", async () => {
     const select = document.getElementById("meetingDistributionMode");
     const mode = select.value;
-    const next = getSystemSettings();
+    const next = await getSystemSettings();
     next.meetingDistributionMode = mode;
-    setSystemSettings(next);
+    await setSystemSettings(next);
     alert("تم حفظ إعدادات توزيع الاجتماعات بنجاح.");
   });
+  })();
 }
 // تحميل قائمة رؤساء الأقسام
-function loadManagersList(selectId) {
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
+async function loadManagersList(selectId) {
+  const users = await getUsers();
   const managers = users.filter(u => u.role === "manager" || u.role === "admin");
   const select = document.getElementById(selectId);
   
@@ -1924,11 +1957,11 @@ function showUserModal() {
   updateManagerFieldVisibility("newRole", "newManager");
 }
 
-function showEditUserModal() {
+async function showEditUserModal() {
   const username = prompt("أدخل اسم المستخدم الذي تريد تعديله:");
   if (!username) return;
   
-  const users = JSON.parse(localStorage.getItem("users"));
+  const users = await getUsers();
   const user = users.find(u => u.username === username);
   if (!user) {
     alert("المستخدم غير موجود");
@@ -1962,7 +1995,7 @@ function showEditUserModal() {
   document.getElementById("editUserModal").style.display = "block";
 }
 
-function editUser(e) {
+async function editUser(e) {
   e.preventDefault();
   const username = document.getElementById("editUsername").value;
   const password = document.getElementById("editPassword").value;
@@ -1976,7 +2009,7 @@ function editUser(e) {
     permissions.push(checkbox.value);
   });
   
-  const users = JSON.parse(localStorage.getItem("users"));
+  const users = await getUsers();
   const userIndex = users.findIndex(u => u.username === username);
   if (userIndex === -1) {
     alert("المستخدم غير موجود");
@@ -1992,14 +2025,14 @@ function editUser(e) {
     users[userIndex].password = password;
   }
   
-  localStorage.setItem("users", JSON.stringify(users));
+  await setUsers(users);
   closeModal();
   loadUsersTable();
   alert("تم تحديث المستخدم بنجاح");
 }
 
-function editUserModal(username) {
-  const users = JSON.parse(localStorage.getItem("users"));
+async function editUserModal(username) {
+  const users = await getUsers();
   const user = users.find(u => u.username === username);
   if (!user) return;
   
@@ -2030,7 +2063,7 @@ function editUserModal(username) {
   document.getElementById("editUserModal").style.display = "block";
 }
 
-function addUser(e) {
+async function addUser(e) {
   e.preventDefault();
   const username = document.getElementById("newUsername").value;
   const password = document.getElementById("newPassword").value;
@@ -2044,13 +2077,14 @@ function addUser(e) {
     permissions.push(checkbox.value);
   });
 
-  const users = JSON.parse(localStorage.getItem("users"));
+  const users = await getUsers();
   if (users.find(u => u.username === username)) {
     alert("المستخدم موجود مسبقًا");
     return;
   }
 
   users.push({
+    id: Date.now().toString(),
     username,
     password,
     role,
@@ -2060,13 +2094,13 @@ function addUser(e) {
     isActive: true, // المستخدم الجديد مفعّل افتراضياً
     createdAt: new Date().toLocaleString()
   });
-  localStorage.setItem("users", JSON.stringify(users));
+  await setUsers(users);
   closeModal();
   loadUsersTable();
 }
 
-function loadUsersTable() {
-  const users = JSON.parse(localStorage.getItem("users"));
+async function loadUsersTable() {
+  const users = await getUsers();
   const tbody = document.querySelector("#usersTable tbody");
   tbody.innerHTML = "";
   
@@ -2139,21 +2173,21 @@ function loadUsersTable() {
   });
 }
 
-function deleteUser(username) {
+async function deleteUser(username) {
   if (confirm("هل تريد حذف هذا المستخدم؟")) {
-    const users = JSON.parse(localStorage.getItem("users"));
+    const users = await getUsers();
     const index = users.findIndex(u => u.username === username);
     if (index !== -1) {
       users.splice(index, 1);
-      localStorage.setItem("users", JSON.stringify(users));
+      await setUsers(users);
       loadUsersTable();
     }
   }
 }
 
 // تعطيل/تفعيل المستخدم
-function toggleUserStatus(username) {
-  const users = JSON.parse(localStorage.getItem("users"));
+async function toggleUserStatus(username) {
+  const users = await getUsers();
   const user = users.find(u => u.username === username);
   
   if (!user) {
@@ -2173,31 +2207,39 @@ function toggleUserStatus(username) {
   
   if (confirm(`هل تريد ${newStatus ? 'تفعيل' : 'تعطيل'} المستخدم "${username}"؟`)) {
     user.isActive = newStatus;
-    localStorage.setItem("users", JSON.stringify(users));
-    loadUsersTable();
+    await setUsers(users);
+    await loadUsersTable();
     alert(`تم ${newStatus ? 'تفعيل' : 'تعطيل'} المستخدم بنجاح`);
   }
 }
 
 // صفحة عملائي
 async function initMyLeads() {
-  await loadCurrentUser();
-  if (!checkPagePermission("my-leads.html")) return;
-  // تطبيق الإرجاع التلقائي قبل التحميل
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
-  autoReturnUnansweredLeads(leads);
-  ensureMyLeadsFiltersUI();
-  loadMyLeadsTable();
-  document.getElementById("editLeadForm")?.addEventListener("submit", updateLead);
-  // إضافة event listener لنموذج تعديل الملاحظات
-  document.getElementById("editNotesForm")?.addEventListener("submit", function(e) {
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("my-leads.html")) {
+      hideLoadingPage();
+      return;
+    }
+    // تطبيق الإرجاع التلقائي قبل التحميل
+    const leads = await getLeads();
+    await autoReturnUnansweredLeads(leads);
+    ensureMyLeadsFiltersUI();
+    await loadMyLeadsTable();
+    document.getElementById("editLeadForm")?.addEventListener("submit", updateLead);
+    // إضافة event listener لنموذج تعديل الملاحظات
+    document.getElementById("editNotesForm")?.addEventListener("submit", function(e) {
     e.preventDefault();
     saveNotesFromModal();
   });
-  // تحديث مواضع العناصر اللاصقة
-  setTimeout(() => {
-    updateStickyPositions();
-  }, 200);
+    // تحديث مواضع العناصر اللاصقة
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 200);
+  } finally {
+    hideLoadingPage();
+  }
 }
 
 function ensureMyLeadsFiltersUI() {
@@ -2290,17 +2332,18 @@ function ensureMeetingsFiltersUI() {
   let employeeSelectHtml = "";
 
   if (isAdmin || isManager) {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    let employeeUsers = [];
-    if (isAdmin) {
-      employeeUsers = users;
-    } else {
-      employeeUsers = users.filter(u => u.manager === currentUser.username);
-      const selfUser = users.find(u => u.username === currentUser.username);
-      if (selfUser && !employeeUsers.some(u => u.username === selfUser.username)) {
-        employeeUsers.push(selfUser);
+    (async () => {
+      const users = await getUsers();
+      let employeeUsers = [];
+      if (isAdmin) {
+        employeeUsers = users;
+      } else {
+        employeeUsers = users.filter(u => u.manager === currentUser.username);
+        const selfUser = users.find(u => u.username === currentUser.username);
+        if (selfUser && !employeeUsers.some(u => u.username === selfUser.username)) {
+          employeeUsers.push(selfUser);
+        }
       }
-    }
 
     const employeeOptions = ['<option value="">كل الموظفين</option>', '<option value="__unassigned">غير مخصصة</option>']
       .concat(employeeUsers
@@ -2313,6 +2356,7 @@ function ensureMeetingsFiltersUI() {
         ${employeeOptions}
       </select>
     `;
+    })();
   }
 
   bar.innerHTML = `
@@ -2444,8 +2488,8 @@ function ensureMyMeetingsFiltersUI() {
   }, 100);
 }
 
-function loadMyLeadsTable() {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function loadMyLeadsTable() {
+  let leads = await getLeads();
   
   // تحويل جميع حالات in-progress إلى failed
   let needsUpdate = false;
@@ -2457,7 +2501,7 @@ function loadMyLeadsTable() {
     }
   });
   if (needsUpdate) {
-    localStorage.setItem("leads", JSON.stringify(leads));
+    await setLeads(leads);
   }
   
   let myLeads = leads
@@ -2495,7 +2539,7 @@ function loadMyLeadsTable() {
   tbody.innerHTML = "";
 
   // الحصول على جميع الاجتماعات للبحث عن ملاحظات السيلز
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   
   myLeads.forEach((lead, i) => {
     const isConverted = lead.convertedToMeeting || false;
@@ -2556,7 +2600,7 @@ function loadMyLeadsTable() {
             buttons.push({html: `<button disabled>لا يمكن التحويل إلى ميتنج</button>`});
           }
           if (canShowMeetingDetails) {
-            buttons.push({html: `<button onclick="openMeetingDetailsForLead('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تفاصيل الاجتماع</button>`});
+            buttons.push({html: `<button onclick="(async () => { await openMeetingDetailsForLead('${lead.id}'); })(); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تفاصيل الاجتماع</button>`});
           }
           return createActionsMenu(buttons, lead.id);
         })()}
@@ -2567,12 +2611,10 @@ function loadMyLeadsTable() {
 }
 
 // === نظام الميتنجز ===
-if (!localStorage.getItem("meetings")) {
-  localStorage.setItem("meetings", JSON.stringify([]));
-}
+// تم نقل البيانات إلى Firebase
 
-function startMeetingConversion(leadId) {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+async function startMeetingConversion(leadId) {
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === leadId);
   if (!lead || lead.assignedTo !== currentUser.username) {
     alert("غير مصرح");
@@ -2587,7 +2629,7 @@ function startMeetingConversion(leadId) {
     alert("لا يمكنك تحويل العميل إلى ميتنج إلا بعد ضبط حالة الرد إلى (تم الرد) وحالة المكالمة إلى (تم التحويل).");
     return;
   }
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const existingMeeting = meetings.find(m => m.leadId === leadId);
   if (existingMeeting) {
     alert("تم إنشاء اجتماع لهذا العميل مسبقاً.");
@@ -2625,18 +2667,18 @@ function startMeetingConversion(leadId) {
   modal.style.display = "block";
 }
 
-function assignMeeting(id) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function assignMeeting(id) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (meeting.assignedTo) return alert("تم اختياره مسبقًا");
   meeting.assignedTo = currentUser.username;
   meeting.status = "in-progress";
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   loadMeetingsTable();
 }
 
 // توجيه اجتماع إلى موظف محدد بواسطة المدير
-function assignMeetingToUser(id, username) {
+async function assignMeetingToUser(id, username) {
   if (!username) {
     alert("يرجى اختيار موظف لتوجيه الاجتماع له");
     return;
@@ -2645,11 +2687,11 @@ function assignMeetingToUser(id, username) {
     alert("غير مصرح لك بهذا الإجراء");
     return;
   }
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
 
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const users = await getUsers();
   const targetUser = users.find(u => u.username === username);
   if (!targetUser) {
     alert("يرجى اختيار مستخدم صالح");
@@ -2680,7 +2722,7 @@ function assignMeetingToUser(id, username) {
 
   meeting.assignedTo = username;
   meeting.status = "in-progress";
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   loadMeetingsTable();
   alert(`تم توجيه الاجتماع إلى ${username}`);
 
@@ -2689,8 +2731,8 @@ function assignMeetingToUser(id, username) {
     pushNotification("meeting_assigned", `تم توجيه اجتماع إليك: ${meeting.company}`, [username]);
   }
 }
-function updateMeetingStatus(id, status) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function updateMeetingStatus(id, status) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
   
@@ -2704,7 +2746,7 @@ function updateMeetingStatus(id, status) {
   }
   
   meeting.status = status;
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   
   // تحديث جدول اجتماعاتي لإظهار/إخفاء خيارات التحويل وزر الحفظ
   if (document.getElementById("myMeetingsTable")) {
@@ -2717,24 +2759,24 @@ function updateMeetingStatus(id, status) {
   }
 }
 
-function editMeetingLink(id, link) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function editMeetingLink(id, link) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   meeting.meetingLink = link;
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   loadMeetingsTable();
   loadMyMeetingsTable();
 }
 
-function editMeetingNotes(id) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function editMeetingNotes(id) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
   
   const note = prompt("الملاحظات:", meeting.notes);
   if (note !== null) {
     meeting.notes = note;
-    localStorage.setItem("meetings", JSON.stringify(meetings));
+    await setMeetings(meetings);
     
     // تحديث فوري للواجهة
     const row = document.querySelector(`tr[data-meeting-id="${id}"]`);
@@ -2752,8 +2794,8 @@ function editMeetingNotes(id) {
   }
 }
 
-function updateConversion(id, value) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function updateConversion(id, value) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
   
@@ -2768,7 +2810,7 @@ function updateConversion(id, value) {
   
   meeting.conversion = value;
   if (value === "unfunded") meeting.price = "";
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   
   // تحديث جدول اجتماعاتي لإظهار/إخفاء زر الحفظ
   if (document.getElementById("myMeetingsTable")) {
@@ -2781,8 +2823,8 @@ function updateConversion(id, value) {
   }
 }
 
-function updatePrice(id, price) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function updatePrice(id, price) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
   
@@ -2796,7 +2838,7 @@ function updatePrice(id, price) {
   }
   
   meeting.price = price;
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   
   // تحديث فوري - السعر محفوظ في localStorage
   // لا حاجة لإعادة تحميل الجدول لأن الحقل موجود بالفعل
@@ -2810,12 +2852,12 @@ function updatePrice(id, price) {
   }
 }
 
-function lockMeeting(id) {
+async function lockMeeting(id) {
   if (!confirm("هل أنت متأكد من قفل هذا الاجتماع؟ بعد القفل لن تتمكن من تعديل بيانات الاجتماع إلا عن طريق المدير أو رئيس القسم.")) {
     return;
   }
   
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   if (!meeting) return;
   
@@ -2828,7 +2870,7 @@ function lockMeeting(id) {
   meeting.locked = true;
   meeting.lockedAt = new Date().toISOString();
   meeting.lockedBy = currentUser.username;
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   
   alert("تم قفل الاجتماع بنجاح. لن تتمكن من تعديل بياناته إلا عن طريق المدير أو رئيس القسم.");
   
@@ -2842,12 +2884,12 @@ function lockMeeting(id) {
 }
 
 // إرجاع الاجتماع إلى القائمة العامة
-function returnMeetingToPool(id) {
+async function returnMeetingToPool(id) {
   if (!confirm("هل تريد إرجاع هذا الاجتماع إلى القائمة العامة؟ سيتم إزالته من اجتماعاتك.")) {
     return;
   }
   
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === id);
   
   if (!meeting) {
@@ -2878,7 +2920,7 @@ function returnMeetingToPool(id) {
   meeting.assignedTo = null;
   meeting.status = "new";
   
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+  await setMeetings(meetings);
   
   alert("تم إرجاع الاجتماع إلى القائمة العامة بنجاح");
   loadMyMeetingsTable();
@@ -2891,20 +2933,28 @@ function returnMeetingToPool(id) {
 
 // صفحة جميع الميتنجز
 async function initMeetingsPage() {
-  await loadCurrentUser();
-  if (!checkPagePermission("meetings.html")) return;
-  ensureMeetingsFiltersUI();
-  loadMeetingsTable();
-  // تحديث مواضع العناصر اللاصقة
-  setTimeout(() => {
-    updateStickyPositions();
-  }, 200);
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("meetings.html")) {
+      hideLoadingPage();
+      return;
+    }
+    ensureMeetingsFiltersUI();
+    await loadMeetingsTable();
+    // تحديث مواضع العناصر اللاصقة
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 200);
+  } finally {
+    hideLoadingPage();
+  }
 }
 
 // صفحة جميع الميتنجز
-function loadMeetingsTable() {
-  let meetings = JSON.parse(localStorage.getItem("meetings") || "[]")
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+async function loadMeetingsTable() {
+  let meetings = await getMeetings();
+  meetings = meetings.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
   const isAdmin = currentUser.role === "admin";
   const isManager = currentUser.role === "manager";
@@ -2963,7 +3013,7 @@ function loadMeetingsTable() {
 
   // من يمكن التوجيه لهم بحسب الدور
   let assignableUsers = [];
-  const usersAll = JSON.parse(localStorage.getItem("users") || "[]");
+  const usersAll = await getUsers();
   if (isManager) {
     // موظفو المدير + المدير نفسه
     assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
@@ -3005,7 +3055,7 @@ function loadMeetingsTable() {
       <td>
         ${(() => {
           const buttons = [];
-          buttons.push({html: `<button onclick="viewMeetingDetails('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
+          buttons.push({html: `<button onclick="(async () => { await viewMeetingDetails('${m.id}'); })(); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
           if (isManager || isAdmin) {
             buttons.push({html: `<button onclick="openMeetingDetailsForEdit('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تعديل الاجتماع</button>`});
           }
@@ -3033,18 +3083,27 @@ function loadMeetingsTable() {
 
 // صفحة ميتنجزي
 async function initMyMeetings() {
-  await loadCurrentUser();
-  if (!checkPagePermission("my-meetings.html")) return;
-  ensureMyMeetingsFiltersUI();
-  loadMyMeetingsTable();
-  // تحديث مواضع العناصر اللاصقة
-  setTimeout(() => {
-    updateStickyPositions();
-  }, 200);
+  showLoadingPage();
+  try {
+    await loadCurrentUser();
+    if (!checkPagePermission("my-meetings.html")) {
+      hideLoadingPage();
+      return;
+    }
+    ensureMyMeetingsFiltersUI();
+    await loadMyMeetingsTable();
+    // تحديث مواضع العناصر اللاصقة
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 200);
+  } finally {
+    hideLoadingPage();
+  }
 }
 
-function loadMyMeetingsTable() {
-  let meetings = JSON.parse(localStorage.getItem("meetings") || "[]")
+async function loadMyMeetingsTable() {
+  let meetings = await getMeetings();
+  meetings = meetings
     .filter(m => m.assignedTo === currentUser.username)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
@@ -3194,23 +3253,23 @@ function ensureMeetingDetailsModal() {
   document.body.appendChild(modal);
 }
 
-function openMeetingDetailsForLead(leadId) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function openMeetingDetailsForLead(leadId) {
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.leadId === leadId);
   if (!meeting) {
     alert("لم يتم إنشاء اجتماع لهذا العميل بعد. يرجى تحويل العميل إلى اجتماع أولاً.");
     return;
   }
-  viewMeetingDetails(meeting.id);
+  await viewMeetingDetails(meeting.id);
 }
 
-function viewMeetingDetails(meetingId, hidePrice = false) {
+async function viewMeetingDetails(meetingId, hidePrice = false) {
   ensureMeetingDetailsModal();
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === meetingId);
   if (!meeting) return;
   meetingDetailsContext = { meetingId: meeting.id, mode: "view" };
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === meeting.leadId);
   const modal = document.getElementById("meetingDetailsModal");
   const form = document.getElementById("meetingDetailsForm");
@@ -3250,22 +3309,22 @@ function viewMeetingDetails(meetingId, hidePrice = false) {
   modal.style.display = "block";
 }
 
-function viewMeetingDetailsLocked(meetingId) {
+async function viewMeetingDetailsLocked(meetingId) {
   // عرض تفاصيل الاجتماع المقفول بدون إمكانية التعديل
   ensureMeetingDetailsModal();
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === meetingId);
   if (!meeting) {
     alert("الاجتماع غير موجود.");
     return;
   }
-  viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
+  await viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
 }
 
-function openMeetingDetailsForEdit(meetingId) {
+async function openMeetingDetailsForEdit(meetingId) {
   // فتح نموذج التعديل للمدير ورئيس القسم - يمكنهم التعديل حتى لو كان الاجتماع مقفولاً
   ensureMeetingDetailsModal();
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === meetingId);
   if (!meeting) {
     alert("الاجتماع غير موجود.");
@@ -3285,7 +3344,7 @@ function openMeetingDetailsForEdit(meetingId) {
   const info = document.getElementById("meetingDetailsInfo");
   const title = document.getElementById("meetingDetailsTitle");
   form.style.display = "block";
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === meeting.leadId);
   const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
   
@@ -3365,9 +3424,9 @@ function openMeetingDetailsForEdit(meetingId) {
   modal.style.display = "block";
 }
 
-function openMeetingDetailsForMyMeeting(meetingId) {
+async function openMeetingDetailsForMyMeeting(meetingId) {
   ensureMeetingDetailsModal();
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meetings = await getMeetings();
   const meeting = meetings.find(m => m.id === meetingId);
   if (!meeting) {
     alert("الاجتماع غير موجود.");
@@ -3379,7 +3438,7 @@ function openMeetingDetailsForMyMeeting(meetingId) {
   const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
   if (isLocked && !canEditLocked) {
     alert("تم قفل هذا الاجتماع. لا يمكنك التعديل عليه إلا عن طريق المدير أو رئيس القسم.");
-    viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
+    await viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
     return;
   }
   
@@ -3389,7 +3448,7 @@ function openMeetingDetailsForMyMeeting(meetingId) {
   const info = document.getElementById("meetingDetailsInfo");
   const title = document.getElementById("meetingDetailsTitle");
   form.style.display = "block";
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === meeting.leadId);
   const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
   
@@ -3451,7 +3510,7 @@ function openMeetingDetailsForMyMeeting(meetingId) {
   modal.style.display = "block";
 }
 
-function saveMeetingDetails() {
+async function saveMeetingDetails() {
   if (!meetingDetailsContext) return;
   const dateVal = document.getElementById("meetingDateInput").value;
   const timeVal = document.getElementById("meetingTimeInput").value;
@@ -3474,7 +3533,7 @@ function saveMeetingDetails() {
   const scheduledIso = new Date(`${dateVal}T${timeVal}`).toISOString();
 
   if (meetingDetailsContext.mode === "edit") {
-    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const meetings = await getMeetings();
     const meeting = meetings.find(m => m.id === meetingDetailsContext.meetingId);
     if (!meeting) return;
     
@@ -3513,7 +3572,7 @@ function saveMeetingDetails() {
     }
     
     meeting.updatedAt = new Date().toISOString();
-    localStorage.setItem("meetings", JSON.stringify(meetings));
+    await setMeetings(meetings);
     alert("تم تحديث تفاصيل الاجتماع بنجاح.");
     closeMeetingDetailsModal();
     if (document.getElementById("meetingsTable")) {
@@ -3526,8 +3585,8 @@ function saveMeetingDetails() {
       loadMyLeadsTable();
     }
   } else if (meetingDetailsContext.mode === "create") {
-    const leads = JSON.parse(localStorage.getItem("leads") || "[]");
-    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const leads = await getLeads();
+    const meetings = await getMeetings();
     const lead = leads.find(l => l.id === meetingDetailsContext.leadId);
     if (!lead) {
       alert("تعذر العثور على العميل.");
@@ -3540,7 +3599,7 @@ function saveMeetingDetails() {
       return;
     }
     // توزيع الاجتماع تلقائياً على موظفي السيلز بالتساوي
-    const assignedTo = assignMeetingToSalesEqually(meetings);
+    const assignedTo = await assignMeetingToSalesEqually(meetings);
     
     const newMeeting = {
       id: Date.now().toString(),
@@ -3560,10 +3619,10 @@ function saveMeetingDetails() {
       createdBy: currentUser.username
     };
     meetings.push(newMeeting);
-    localStorage.setItem("meetings", JSON.stringify(meetings));
+    await setMeetings(meetings);
     lead.convertedToMeeting = true;
     lead.updatedAt = new Date().toISOString();
-    localStorage.setItem("leads", JSON.stringify(leads));
+    await setLeads(leads);
     
     // إرسال إشعار للموظف إذا تم التوزيع التلقائي
     if (assignedTo) {
@@ -3585,7 +3644,7 @@ function saveMeetingDetails() {
       loadMyLeadsTable();
     }
   } else if (meetingDetailsContext.mode === "createFromFailed") {
-    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const meetings = await getMeetings();
     const failedMeeting = meetings.find(m => m.id === meetingDetailsContext.failedMeetingId);
     if (!failedMeeting) {
       alert("تعذر العثور على الاجتماع الأصلي.");
@@ -3619,7 +3678,7 @@ function saveMeetingDetails() {
     };
     
     meetings.push(newMeeting);
-    localStorage.setItem("meetings", JSON.stringify(meetings));
+    await setMeetings(meetings);
     
     alert("تم تسجيل الاجتماع الجديد بنجاح.");
     closeMeetingDetailsModal();
@@ -3632,8 +3691,8 @@ function saveMeetingDetails() {
   }
 }
 
-function registerNewMeetingFromFailed(meetingId) {
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function registerNewMeetingFromFailed(meetingId) {
+  const meetings = await getMeetings();
   const failedMeeting = meetings.find(m => m.id === meetingId);
   if (!failedMeeting) {
     alert("الاجتماع غير موجود.");
@@ -3666,7 +3725,7 @@ function registerNewMeetingFromFailed(meetingId) {
   title.textContent = `تسجيل اجتماع جديد - ${failedMeeting.company}`;
   
   // عرض معلومات الاجتماع الأصلي
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const leads = await getLeads();
   const lead = leads.find(l => l.id === failedMeeting.leadId);
   const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
   
@@ -3754,9 +3813,9 @@ function formatPhoneWithIcons(phone) {
 }
 
 // === نظام التقارير ===
-function openReports(username) {
-  // حفظ اسم المستخدم في localStorage للوصول إليه في صفحة التقارير
-  localStorage.setItem("reportUser", username);
+async function openReports(username) {
+  // حفظ اسم المستخدم في Firebase للوصول إليه في صفحة التقارير
+  await setFirebaseData('reportUser', username);
   window.location.href = "reports.html";
 }
 
@@ -3764,9 +3823,9 @@ function openAllReports() {
   window.location.href = "all-reports.html";
 }
 
-function calculateReports(username, startDate, endDate) {
-  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
-  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+async function calculateReports(username, startDate, endDate) {
+  const leads = await getLeads();
+  const meetings = await getMeetings();
   
   // تحويل التواريخ إلى Date objects للمقارنة
   const start = startDate ? new Date(startDate) : new Date(0); // إذا لم يتم تحديد تاريخ، نبدأ من البداية
@@ -3860,10 +3919,10 @@ function calculateReports(username, startDate, endDate) {
   };
 }
 
-function loadReports() {
-  loadCurrentUser();
+async function loadReports() {
+  await loadCurrentUser();
   
-  const reportUsername = localStorage.getItem("reportUser");
+  const reportUsername = await getFirebaseData('reportUser');
   if (!reportUsername) {
     alert("لم يتم تحديد مستخدم");
     window.location.href = "users.html";
@@ -3892,8 +3951,8 @@ function loadReports() {
   endDateInput.addEventListener("change", updateReports);
 }
 
-function updateReports() {
-  const reportUsername = localStorage.getItem("reportUser");
+async function updateReports() {
+  const reportUsername = await getFirebaseData('reportUser');
   const startDate = document.getElementById("startDate").value;
   const endDate = document.getElementById("endDate").value;
   
@@ -3902,7 +3961,7 @@ function updateReports() {
     return;
   }
   
-  const stats = calculateReports(reportUsername, startDate, endDate);
+  const stats = await calculateReports(reportUsername, startDate, endDate);
   
   // عرض إحصائيات Leads
   document.getElementById("coldLeadsTotal").textContent = stats.coldLeads.total;
@@ -3960,8 +4019,8 @@ function updateReports() {
   document.getElementById("totalFundedPrice").textContent = stats.totalFunded.totalPrice.toFixed(2);
 }
 
-function calculateAllUsersReports(startDate, endDate) {
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
+async function calculateAllUsersReports(startDate, endDate) {
+  const users = await getUsers();
   const allStats = [];
   
   // تحديد المستخدمين الذين يجب عرض تقاريرهم
@@ -3982,14 +4041,14 @@ function calculateAllUsersReports(startDate, endDate) {
   }
   
   // حساب التقارير لكل مستخدم
-  usersToShow.forEach(user => {
-    const stats = calculateReports(user.username, startDate, endDate);
+  for (const user of usersToShow) {
+    const stats = await calculateReports(user.username, startDate, endDate);
     allStats.push({
       username: user.username,
       role: user.role,
       stats: stats
     });
-  });
+  }
   
   return allStats;
 }
@@ -4025,7 +4084,7 @@ function loadAllReports() {
   endDateInput.addEventListener("change", updateAllReports);
 }
 
-function updateAllReports() {
+async function updateAllReports() {
   const startDate = document.getElementById("startDate").value;
   const endDate = document.getElementById("endDate").value;
   
@@ -4034,7 +4093,7 @@ function updateAllReports() {
     return;
   }
   
-  const allStats = calculateAllUsersReports(startDate, endDate);
+  const allStats = await calculateAllUsersReports(startDate, endDate);
   const tbody = document.querySelector("#allReportsTable tbody");
   tbody.innerHTML = "";
   
