@@ -246,7 +246,6 @@ async function loadCurrentUser() {
     }
   } catch (error) {
     console.error('Error loading user from database:', error);
-    hideLoadingPage();
     window.location.href = "index.html";
     return;
   }
@@ -293,9 +292,6 @@ async function loadCurrentUser() {
   initNotificationsUI();
   // تظليل رابط الصفحة الحالية في شريط التنقل
   highlightActiveNav();
-  
-  // إخفاء صفحة التحميل
-  hideLoadingPage();
 }
 
 // إظهار صفحة التحميل
@@ -683,7 +679,6 @@ async function initDashboard() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("dashboard.html")) {
-      hideLoadingPage();
       return;
     }
     await updateStats();
@@ -731,7 +726,6 @@ async function initLeadsPage() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("leads.html")) {
-      hideLoadingPage();
       return;
     }
     ensureLeadsFiltersUI();
@@ -1775,7 +1769,6 @@ async function initUsersPage() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("users.html")) {
-      hideLoadingPage();
       return;
     }
     await loadUsersTable();
@@ -2219,7 +2212,6 @@ async function initMyLeads() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("my-leads.html")) {
-      hideLoadingPage();
       return;
     }
     // تطبيق الإرجاع التلقائي قبل التحميل
@@ -2937,7 +2929,6 @@ async function initMeetingsPage() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("meetings.html")) {
-      hideLoadingPage();
       return;
     }
     ensureMeetingsFiltersUI();
@@ -3087,7 +3078,6 @@ async function initMyMeetings() {
   try {
     await loadCurrentUser();
     if (!checkPagePermission("my-meetings.html")) {
-      hideLoadingPage();
       return;
     }
     ensureMyMeetingsFiltersUI();
