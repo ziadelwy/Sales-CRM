@@ -8,6 +8,15 @@
   <link rel="icon" href="Icon.png" type="image/png"/>
 </head>
 <body>
+  <!-- صفحة التحميل -->
+  <div id="loadingPage">
+    <div class="loading-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text">جاري تحميل البيانات...</div>
+  </div>
+
   <header>
     <div class="brand-logo">
       <img src="Callva logo Horizontal.png" alt="CallVa Logo">
@@ -90,11 +99,10 @@
 
   <script src="script.js"></script>
   <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      initMyLeads();
+    document.addEventListener("DOMContentLoaded", async function() {
+      await initMyLeads();
       // إخفاء "الرئيسية" عن السيلز وتلي سيلز
-      const user = JSON.parse(localStorage.getItem("currentUser"));
-      if (user && (user.role === "sales" || user.role === "telesales")) {
+      if (currentUser && (currentUser.role === "sales" || currentUser.role === "telesales")) {
         const dashboardLink = document.getElementById("dashboardLink");
         if (dashboardLink) dashboardLink.style.display = "none";
       }
