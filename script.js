@@ -933,21 +933,19 @@ async function loadLeadsTable() {
 
   // من يمكن التوجيه لهم بحسب الدور (للمدير ورئيس القسم)
   let assignableUsers = [];
-  (async () => {
-    const usersAll = await getUsers();
-    if (isManager) {
-      // موظفو المدير + المدير نفسه
-      assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
-      const selfUser = usersAll.find(u => u.username === currentUser.username);
-      if (selfUser) {
-        const exists = assignableUsers.some(u => u.username === selfUser.username);
-        if (!exists) assignableUsers.push(selfUser);
-      }
-    } else if (isAdmin) {
-      // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
-      assignableUsers = usersAll.slice();
+  const usersAll = await getUsers();
+  if (isManager) {
+    // موظفو المدير + المدير نفسه
+    assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
+    const selfUser = usersAll.find(u => u.username === currentUser.username);
+    if (selfUser) {
+      const exists = assignableUsers.some(u => u.username === selfUser.username);
+      if (!exists) assignableUsers.push(selfUser);
     }
-  })();
+  } else if (isAdmin) {
+    // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
+    assignableUsers = usersAll.slice();
+  }
 
   leads.forEach((lead, index) => {
     const canAssign = lead.status === "new" && !lead.assignedTo;
