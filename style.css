@@ -1,0 +1,650 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&family=Montserrat:wght@300;400;600;700;800;900&display=swap');
+
+:root {
+  --brand-purple: #7700C4;
+  --brand-blue: #2E3192;
+  --brand-gradient: linear-gradient(135deg, var(--brand-purple) 0%, var(--brand-blue) 100%);
+  --text-dark: #2c3e50;
+  --text-muted: #7f8c8d;
+  --surface: #ffffff;
+  --surface-alt: #f8f9fc;
+  --shadow: 0 10px 25px rgba(0,0,0,0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Cairo', 'Montserrat', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background: linear-gradient(180deg, #f3f2ff 0%, #eef3ff 100%);
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+header {
+  background: var(--brand-gradient);
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: var(--shadow);
+}
+
+.brand-logo {
+  position: absolute;
+  right: 1rem;
+  top: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-logo img {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.user-info {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  color: white;
+}
+
+.user-info button {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.navbar {
+  background: var(--surface);
+  padding: 1rem;
+  text-align: center;
+  position: sticky;
+  top: calc(var(--header-height, 70px));
+  z-index: 999;
+  box-shadow: var(--shadow);
+}
+
+.navbar a {
+  color: var(--brand-blue);
+  margin: 0 1rem;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+}
+
+.navbar a:hover {
+  color: white;
+  background: var(--brand-gradient);
+}
+
+main {
+  padding: 2rem;
+}
+
+.add-btn {
+  background: var(--brand-gradient);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: visible;
+  box-shadow: var(--shadow);
+  display: table;
+}
+
+th, td {
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+}
+
+th {
+  background: var(--brand-blue);
+  color: white;
+}
+
+thead {
+  position: sticky;
+  top: var(--thead-top, calc(var(--header-height, 70px) + var(--navbar-height, 60px) + var(--filter-height, 70px)));
+  z-index: 998;
+  background: var(--brand-blue);
+  display: table-header-group;
+}
+
+thead th {
+  position: relative;
+  z-index: 999;
+  background: var(--brand-blue);
+}
+
+/* Sticky positioning for filter bars */
+#leadsFilters,
+#myLeadsFilters,
+#meetingsFilters,
+#myMeetingsFilters {
+  position: sticky;
+  top: calc(var(--header-height, 70px) + var(--navbar-height, 60px));
+  z-index: 997;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+tr:hover {
+  background: var(--surface-alt);
+}
+
+/* تباين ألوان الصفوف في الجداول */
+tbody tr:nth-child(even) {
+  background-color: #e7ebf8;
+}
+
+tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+tbody tr:hover {
+  background-color: var(--surface-alt) !important;
+}
+
+button {
+  background: var(--brand-gradient);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 0 0.25rem;
+  box-shadow: var(--shadow);
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+  background-color: white;
+  margin: 10% auto;
+  padding: 2rem;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 500px;
+}
+
+.close {
+  float: left;
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+form input, form select {
+  width: 100%;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  flex: 1;
+  min-width: 150px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card h3 {
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.stat-card p {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--text-dark);
+}
+
+.login-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-container {
+  background: white;
+  padding: 3rem;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.login-container h1 {
+  margin-bottom: 2rem;
+  color: #2c3e50;
+}
+
+.error {
+  color: #e74c3c;
+  margin-top: 1rem;
+}
+
+/* حالات العملاء */
+.status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.status.new { background: var(--brand-blue); color: white; }
+.status.in-progress { background: #f39c12; color: white; }
+.status.failed { background: #e74c3c; color: white; }
+.status.done { background: #27ae60; color: white; }
+
+.assign {
+  background: var(--brand-purple);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.8rem;
+}
+
+.small { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+
+.notes-cell {
+  max-width: 150px;
+  word-wrap: break-word;
+  font-size: 0.85rem;
+}
+
+.notes-display {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+
+input[type="url"], input[type="number"] {
+  width: 100%;
+  padding: 0.4rem;
+  margin: 0.2rem 0;
+  font-size: 0.8rem;
+  border: 1px solid #e6e8f0;
+  border-radius: 6px;
+}
+
+/* قائمة الصلاحيات */
+.permissions-list {
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  margin: 0.5rem 0;
+}
+
+.permissions-list label {
+  display: block;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.permissions-list label:hover {
+  background: #e9ecef;
+}
+
+.permissions-list input[type="checkbox"] {
+  margin-left: 0.5rem;
+  cursor: pointer;
+  width: auto;
+}
+
+.permissions-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.permissions-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.permissions-list::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.permissions-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* عناوين بشخصية CallVa */
+header h1 {
+  font-family: 'Cairo', 'Montserrat', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #ffffff; /* لتحسين الوضوح على خلفية الهيدر */
+  text-shadow: rgba(0,0,0,0.25) 0 2px 8px;
+}
+
+.page-title {
+  font-family: 'Cairo', 'Montserrat', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* لمسات زخرفية على البطاقات */
+.stat-card::after {
+  content: "";
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(closest-side, rgba(119,0,196,0.18), rgba(46,49,146,0.08), transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* شعار نصي صغير يمكن استخدامه عند الحاجة */
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-weight: 700;
+}
+
+.brand-badge .icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  border-radius: 6px;
+  background: var(--brand-gradient);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
+}
+
+/* تصغير أزرار عمود الإجراءات بنسبة 25% */
+#leadsTable td:last-child button,
+#myLeadsTable td:last-child button,
+#meetingsTable td:last-child button,
+#myMeetingsTable td:last-child button {
+  font-size: 0.75rem !important;
+  padding: 0.35rem 0.65rem !important;
+  display: inline-block !important;
+  width: auto !important;
+  line-height: 1.1 !important;
+}
+
+#leadsTable td:last-child select,
+#myLeadsTable td:last-child select,
+#meetingsTable td:last-child select,
+#myMeetingsTable td:last-child select {
+  font-size: 0.85rem !important;
+  padding: 0.35rem 0.5rem !important;
+  height: auto !important;
+  display: inline-block !important;
+  width: auto !important;
+}
+
+/* واجهة الإشعارات - تحسينات بسيطة */
+#notifBell button {
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+#notifDropdown button.small {
+  box-shadow: none;
+}
+
+/* قائمة منسدلة للأزرار في عمود الإجراءات */
+.actions-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.actions-menu-btn {
+  background: var(--brand-gradient);
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  box-shadow: var(--shadow);
+  min-width: 40px;
+  text-align: center;
+}
+
+.actions-menu-btn:hover {
+  filter: brightness(1.1);
+}
+
+.actions-menu-dropdown {
+  display: none;
+  position: absolute;
+  background: white;
+  min-width: 180px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  z-index: 1000;
+  border-radius: 8px;
+  overflow: hidden;
+  left: 0;
+  top: 100%;
+  margin-top: 0.25rem;
+  direction: rtl;
+}
+
+.actions-menu-dropdown.show {
+  display: block;
+}
+
+.actions-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0.85rem 1.2rem;
+  text-align: right;
+  border: none;
+  background: white;
+  color: var(--text-dark);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-bottom: 1px solid #e8eaf0;
+  transition: all 0.2s ease;
+  box-shadow: none;
+  margin: 0;
+  border-radius: 0;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.actions-menu-dropdown button:last-child {
+  border-bottom: none;
+}
+
+.actions-menu-dropdown button:hover:not(:disabled) {
+  background: linear-gradient(90deg, #f8f9fc 0%, #f0f2f7 100%);
+  color: var(--brand-blue);
+  padding-right: 1.5rem;
+  transform: translateX(-3px);
+}
+
+.actions-menu-dropdown button:active:not(:disabled) {
+  background: #eef3ff;
+  transform: translateX(-1px);
+}
+
+.actions-menu-dropdown button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #fafbfc;
+  color: #95a5a6;
+}
+
+/* تحسين الأزرار الخاصة (تعديل، تفاصيل، إلخ) */
+.actions-menu-dropdown button[onclick*="showEditLeadModal"],
+.actions-menu-dropdown button[onclick*="showEditNotesModal"],
+.actions-menu-dropdown button[onclick*="openMeetingDetailsForMyMeeting"],
+.actions-menu-dropdown button[onclick*="viewMeetingDetails"],
+.actions-menu-dropdown button[onclick*="openMeetingDetailsForEdit"] {
+  color: #2E3192;
+}
+
+.actions-menu-dropdown button[onclick*="assignToMe"],
+.actions-menu-dropdown button[onclick*="assignMeeting"] {
+  color: #27ae60;
+}
+
+.actions-menu-dropdown button[onclick*="startMeetingConversion"],
+.actions-menu-dropdown button[onclick*="registerNewMeetingFromFailed"] {
+  color: #3498db;
+}
+
+.actions-menu-dropdown button[onclick*="returnMeetingToPool"],
+.actions-menu-dropdown button[onclick*="returnMeetingToPool"] {
+  color: #e67e22;
+}
+
+/* تحسين الأقسام الخاصة (مثل التوجيه) */
+.actions-menu-dropdown > div {
+  padding: 0.75rem;
+  background: #f8f9fc;
+  border-bottom: 1px solid #e8eaf0;
+  border-top: 1px solid #e8eaf0;
+  margin: 0.25rem 0;
+}
+
+.actions-menu-dropdown > div:first-child {
+  border-top: none;
+}
+
+.actions-menu-dropdown > div:last-child {
+  border-bottom: none;
+}
+
+.actions-menu-dropdown > div select {
+  width: 100%;
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  transition: border-color 0.2s;
+}
+
+.actions-menu-dropdown > div select:focus {
+  outline: none;
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(46, 49, 146, 0.1);
+}
+
+.actions-menu-dropdown > div button {
+  width: 100% !important;
+  padding: 0.7rem !important;
+  background: var(--brand-gradient) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  font-size: 0.9rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+  display: block !important;
+  text-align: center !important;
+  margin: 0 !important;
+  gap: 0 !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.actions-menu-dropdown > div button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+  filter: brightness(1.05) !important;
+  background: var(--brand-gradient) !important;
+  color: #fff !important;
+  padding-right: 0.7rem !important;
+}
+
+.actions-menu-dropdown > div button:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* تحسين القائمة المنسدلة بشكل عام */
+.actions-menu-dropdown {
+  border: 1px solid #e0e4e8;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* إضافة تأثير للزر الرئيسي */
+.actions-menu-btn:focus {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>إدارة المستخدمين</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+</head>
+<body>
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>إدارة المستخدمين</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+  <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+  </nav>
+
+  <main>
+    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+      <button onclick="showUserModal()" class="add-btn">+ إضافة مستخدم</button>
+      <button id="allReportsBtn" onclick="openAllReports()" class="add-btn" style="background: #9b59b6; display: none;">📊 تقارير جميع المستخدمين</button>
+    </div>
+
+    <!-- نموذج الإضافة -->
+    <div id="userModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>إضافة مستخدم جديد</h2>
+        <form id="addUserForm">
+          <input type="text" placeholder="اسم المستخدم" id="newUsername" required />
+          <input type="password" placeholder="كلمة المرور" id="newPassword" required />
+          <input type="tel" placeholder="رقم الهاتف" id="newPhone" />
+          <select id="newRole" required>
+            <option value="admin">مدير</option>
+            <option value="manager">رئيس قسم</option>
+            <option value="sales">سيلز</option>
+            <option value="telesales">تلي سيلز</option>
+          </select>
+          <select id="newManager" style="display:none;">
+            <option value="">-- اختر المدير المباشر --</option>
+          </select>
+
+          <h3>الصلاحيات المصرح بها</h3>
+          <div class="permissions-list">
+            <label><input type="checkbox" name="perm" value="dashboard.html"> الرئيسية</label>
+            <label><input type="checkbox" name="perm" value="leads.html"> جميع العملاء</label>
+            <label><input type="checkbox" name="perm" value="my-leads.html"> عملائي</label>
+            <label><input type="checkbox" name="perm" value="meetings.html"> جميع الاجتماعات</label>
+            <label><input type="checkbox" name="perm" value="my-meetings.html"> اجتماعاتي</label>
+            <label><input type="checkbox" name="perm" value="users.html"> إدارة المستخدمين</label>
+            <label><input type="checkbox" name="perm" value="clear.html"> مسح البيانات</label>
+          </div>
+
+          <button type="submit">إضافة</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- نموذج التعديل -->
+    <div id="editUserModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>تعديل مستخدم</h2>
+        <form id="editUserForm">
+          <input type="hidden" id="editUsername">
+          <input type="text" id="editUsernameDisplay" disabled>
+          <input type="password" placeholder="كلمة المرور الجديدة (اتركه فارغًا للاحتفاظ بالقديم)" id="editPassword">
+          <input type="tel" placeholder="رقم الهاتف" id="editPhone" />
+          <select id="editRole" required>
+            <option value="admin">مدير</option>
+            <option value="manager">رئيس قسم</option>
+            <option value="sales">سيلز</option>
+            <option value="telesales">تلي سيلز</option>
+          </select>
+          <select id="editManager" style="display:none;">
+            <option value="">-- اختر المدير المباشر --</option>
+          </select>
+
+          <h3>الصلاحيات المصرح بها</h3>
+          <div class="permissions-list">
+            <label><input type="checkbox" name="permEdit" value="dashboard.html"> الرئيسية</label>
+            <label><input type="checkbox" name="permEdit" value="leads.html"> جميع العملاء</label>
+            <label><input type="checkbox" name="permEdit" value="my-leads.html"> عملائي</label>
+            <label><input type="checkbox" name="permEdit" value="meetings.html"> جميع الاجتماعات</label>
+            <label><input type="checkbox" name="permEdit" value="my-meetings.html"> اجتماعاتي</label>
+            <label><input type="checkbox" name="permEdit" value="users.html"> إدارة المستخدمين</label>
+            <label><input type="checkbox" name="permEdit" value="clear.html"> مسح البيانات</label>
+          </div>
+
+          <button type="submit">حفظ</button>
+        </form>
+      </div>
+    </div>
+
+    <table id="usersTable">
+      <thead>
+        <tr>
+          <th>الاسم</th>
+          <th>الدور</th>
+          <th>رقم الهاتف</th>
+          <th>المدير المباشر</th>
+          <th>تاريخ الإنشاء</th>
+          <th>الصلاحيات</th>
+          <th>إجراء</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", initUsersPage);
+  </script>
+</body>
+</html>

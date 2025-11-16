@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>لوحة التحكم</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+</head>
+<body>
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>لوحة التحكم</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+  <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+  </nav>
+
+
+  <main class="dashboard">
+    <div class="stats">
+      <div class="stat-card">
+        <h3>إجمالي العملاء</h3>
+        <p id="totalLeads">0</p>
+      </div>
+      <div class="stat-card">
+        <h3>جديد</h3>
+        <p id="newCount">0</p>
+      </div>
+      <div class="stat-card">
+        <h3>تحت التنفيذ</h3>
+        <p id="inProgress">0</p>
+      </div>
+      <div class="stat-card">
+        <h3>فشل</h3>
+        <p id="failedCount">0</p>
+      </div>
+      <div class="stat-card">
+        <h3>منتهية</h3>
+        <p id="done">0</p>
+      </div>
+    </div>
+
+    <h2>آخر 5 عملاء</h2>
+    <table id="recentTable">
+      <thead>
+        <tr>
+          <th>الشركة</th>
+          <th>الهاتف</th>
+          <th>النوع</th>
+          <th>الحالة</th>
+          <th>الموظف</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", initDashboard);
+  </script>
+</body>
+</html>

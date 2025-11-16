@@ -1,0 +1,4154 @@
+let currentUser = null;
+let firebaseInitialized = false;
+
+// تهيئة Firebase والبيانات
+async function initializeFirebase() {
+  if (firebaseInitialized) return;
+  
+  try {
+    // تهيئة المستخدمين الافتراضيين
+    const usersData = await getFirebaseData('users');
+    if (!usersData) {
+      const adminPassword = await getFirebaseData('adminPassword') || "123456";
+      const defaultUsers = {
+        admin: {
+          username: "admin",
+          password: adminPassword,
+          role: "admin",
+          createdAt: new Date().toLocaleString()
+        }
+      };
+      await setFirebaseData('users', defaultUsers);
+    } else {
+      // تحديث كلمة مرور admin إذا كانت موجودة
+      const adminPassword = await getFirebaseData('adminPassword');
+      if (adminPassword && usersData.admin && usersData.admin.password !== adminPassword) {
+        await updateFirebaseData('users/admin', { password: adminPassword });
+      }
+    }
+    
+    // تهيئة البيانات الأخرى
+    const leadsData = await getFirebaseData('leads');
+    if (!leadsData) {
+      await setFirebaseData('leads', {});
+    }
+    
+    const meetingsData = await getFirebaseData('meetings');
+    if (!meetingsData) {
+      await setFirebaseData('meetings', {});
+    }
+    
+    const notificationsData = await getFirebaseData('notifications');
+    if (!notificationsData) {
+      await setFirebaseData('notifications', {});
+    }
+    
+    firebaseInitialized = true;
+  } catch (error) {
+    console.error('Error initializing Firebase:', error);
+    // Fallback to localStorage if Firebase fails
+    if (!localStorage.getItem("users")) {
+      const adminPassword = localStorage.getItem("adminPassword") || "123456";
+      localStorage.setItem("users", JSON.stringify([
+        { username: "admin", password: adminPassword, role: "admin", createdAt: new Date().toLocaleString() }
+      ]));
+    }
+    if (!localStorage.getItem("leads")) {
+      localStorage.setItem("leads", JSON.stringify([]));
+    }
+    if (!localStorage.getItem("notifications")) {
+      localStorage.setItem("notifications", JSON.stringify([]));
+    }
+  }
+}
+
+// تهيئة Firebase عند تحميل الصفحة
+if (typeof firebase !== 'undefined' && typeof database !== 'undefined') {
+  initializeFirebase();
+}
+
+// Helper functions for data access (Firebase with localStorage fallback)
+async function getUsers() {
+  try {
+    if (typeof database !== 'undefined' && database) {
+      const usersArray = await getFirebaseArray('users');
+      if (usersArray && usersArray.length > 0) {
+        return usersArray;
+      }
+      // إذا كانت Firebase فارغة، جرب localStorage
+      const localUsers = JSON.parse(localStorage.getItem("users") || "[]");
+      if (localUsers.length > 0) {
+        // محاولة رفع البيانات من localStorage إلى Firebase
+        await setUsers(localUsers);
+        return localUsers;
+      }
+    }
+  } catch (error) {
+    console.error('Error getting users from Firebase:', error);
+  }
+  // Fallback to localStorage
+  return JSON.parse(localStorage.getItem("users") || "[]");
+}
+
+async function setUsers(users) {
+  try {
+    if (typeof database !== 'undefined' && database) {
+      const result = await setFirebaseArray('users', users);
+      if (result) {
+        // أيضاً حفظ في localStorage كنسخة احتياطية
+        localStorage.setItem("users", JSON.stringify(users));
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('Error setting users in Firebase:', error);
+  }
+  // Fallback to localStorage
+  localStorage.setItem("users", JSON.stringify(users));
+  return true;
+}
+
+async function getLeads() {
+  try {
+    if (typeof database !== 'undefined') {
+      const leadsArray = await getFirebaseArray('leads');
+      return leadsArray;
+    }
+  } catch (error) {
+    console.error('Error getting leads from Firebase:', error);
+  }
+  // Fallback to localStorage
+  return JSON.parse(localStorage.getItem("leads") || "[]");
+}
+
+async function setLeads(leads) {
+  try {
+    if (typeof database !== 'undefined') {
+      await setFirebaseArray('leads', leads);
+      return true;
+    }
+  } catch (error) {
+    console.error('Error setting leads in Firebase:', error);
+  }
+  // Fallback to localStorage
+  localStorage.setItem("leads", JSON.stringify(leads));
+  return true;
+}
+
+async function getMeetings() {
+  try {
+    if (typeof database !== 'undefined') {
+      const meetingsArray = await getFirebaseArray('meetings');
+      return meetingsArray;
+    }
+  } catch (error) {
+    console.error('Error getting meetings from Firebase:', error);
+  }
+  // Fallback to localStorage
+  return JSON.parse(localStorage.getItem("meetings") || "[]");
+}
+
+async function setMeetings(meetings) {
+  try {
+    if (typeof database !== 'undefined') {
+      await setFirebaseArray('meetings', meetings);
+      return true;
+    }
+  } catch (error) {
+    console.error('Error setting meetings in Firebase:', error);
+  }
+  // Fallback to localStorage
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  return true;
+}
+
+async function getNotifications() {
+  try {
+    if (typeof database !== 'undefined') {
+      const notificationsArray = await getFirebaseArray('notifications');
+      return notificationsArray;
+    }
+  } catch (error) {
+    console.error('Error getting notifications from Firebase:', error);
+  }
+  // Fallback to localStorage
+  return JSON.parse(localStorage.getItem("notifications") || "[]");
+}
+
+async function setNotifications(notifications) {
+  try {
+    if (typeof database !== 'undefined') {
+      await setFirebaseArray('notifications', notifications);
+      return true;
+    }
+  } catch (error) {
+    console.error('Error setting notifications in Firebase:', error);
+  }
+  // Fallback to localStorage
+  localStorage.setItem("notifications", JSON.stringify(notifications));
+  return true;
+}
+
+// تسجيل الدخول
+document.getElementById("loginForm")?.addEventListener("submit", async e => {
+  e.preventDefault();
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  
+  const users = await getUsers();
+  const user = users.find(u => u.username === username && u.password === password);
+  if (user) {
+    // التحقق من حالة المستخدم (مفعّل أم معطل)
+    const isActive = user.isActive !== false; // افتراضياً مفعّل إذا لم يكن محدد
+    if (!isActive) {
+      document.getElementById("loginError").textContent = "هذا الحساب معطل. يرجى الاتصال بالمدير";
+      return;
+    }
+    
+    currentUser = user;
+    localStorage.setItem("currentUser", JSON.stringify(user));
+    // توجيه حسب الصلاحيات أو الدور
+    let redirect = "dashboard.html";
+    if (user.role === "admin") {
+      redirect = "dashboard.html";
+    } else if (user.permissions && user.permissions.length > 0) {
+      // توجيه إلى أول صفحة متاحة في الصلاحيات
+      if (user.permissions.includes("dashboard.html")) {
+        redirect = "dashboard.html";
+      } else if (user.permissions.includes("my-leads.html")) {
+        redirect = "my-leads.html";
+      } else if (user.permissions.includes("my-meetings.html")) {
+        redirect = "my-meetings.html";
+      } else {
+        redirect = user.permissions[0];
+      }
+    } else if (user.role === "sales" || user.role === "telesales") {
+      redirect = "my-leads.html";
+    }
+    window.location.href = redirect;
+  } else {
+    document.getElementById("loginError").textContent = "بيانات غير صحيحة";
+  }
+});
+
+// التحقق من الصلاحيات
+function hasPermission(page) {
+  if (!currentUser) return false;
+  
+  // الأدمن لديه جميع الصلاحيات
+  if (currentUser.role === "admin") return true;
+  
+  // التحقق من الصلاحيات المخصصة
+  const permissions = currentUser.permissions || [];
+  return permissions.includes(page);
+}
+
+// التحقق من الصلاحيات عند تحميل الصفحة
+function checkPagePermission(page) {
+  if (!hasPermission(page)) {
+    alert("غير مصرح لك بالوصول إلى هذه الصفحة");
+    // توجيه إلى صفحة مناسبة حسب الصلاحيات
+    if (hasPermission("my-leads.html")) {
+      window.location.href = "my-leads.html";
+    } else if (hasPermission("my-meetings.html")) {
+      window.location.href = "my-meetings.html";
+    } else {
+      window.location.href = "index.html";
+    }
+    return false;
+  }
+  return true;
+}
+
+// تحميل المستخدم
+async function loadCurrentUser() {
+  const user = JSON.parse(localStorage.getItem("currentUser"));
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+  
+  // تعيين المستخدم الحالي أولاً (قبل محاولة التحديث)
+  currentUser = user;
+  
+  try {
+    // تحديث بيانات المستخدم من قاعدة البيانات (لضمان الحصول على أحدث الصلاحيات)
+    const users = await getUsers();
+    const updatedUser = users.find(u => u.username === user.username);
+    if (updatedUser) {
+      currentUser = updatedUser;
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+    }
+  } catch (error) {
+    console.error('Error loading user from database:', error);
+    // الاستمرار مع المستخدم من localStorage في حالة الخطأ
+  }
+  
+  document.querySelectorAll("#currentUser").forEach(el => 
+    el.textContent = `${currentUser.username} (${getRoleText(currentUser.role)})`
+  );
+
+  // إخفاء/إظهار الروابط حسب الصلاحيات
+  if (currentUser.role === "admin" || hasPermission("users.html")) {
+    document.querySelectorAll("#usersLink").forEach(l => l.style.display = "inline");
+  } else {
+    document.querySelectorAll("#usersLink").forEach(l => l.style.display = "none");
+  }
+  
+  // إظهار رابط تغيير كلمة مرور المدير للمدير فقط
+  if (currentUser.role === "admin") {
+    document.querySelectorAll("#adminPasswordLink").forEach(l => l.style.display = "inline");
+  } else {
+    document.querySelectorAll("#adminPasswordLink").forEach(l => l.style.display = "none");
+  }
+
+  // إخفاء رابط "الرئيسية" إذا لم يكن لديه صلاحية
+  if (!hasPermission("dashboard.html")) {
+    document.querySelectorAll("a[href='dashboard.html']").forEach(a => a.style.display = "none");
+  }
+  
+  // إخفاء الروابط الأخرى حسب الصلاحيات
+  const pageLinks = {
+    "leads.html": "جميع العملاء",
+    "my-leads.html": "عملائي",
+    "meetings.html": "جميع الاجتماعات",
+    "my-meetings.html": "اجتماعاتي",
+    "clear.html": "مسح البيانات"
+  };
+  
+  Object.keys(pageLinks).forEach(page => {
+    if (!hasPermission(page)) {
+      document.querySelectorAll(`a[href='${page}']`).forEach(a => a.style.display = "none");
+    }
+  });
+
+  // تهيئة واجهة الإشعارات
+  initNotificationsUI();
+  // تظليل رابط الصفحة الحالية في شريط التنقل
+  highlightActiveNav();
+}
+
+function logout() {
+  localStorage.removeItem("currentUser");
+  window.location.href = "index.html";
+}
+
+// تغيير كلمة مرور المدير أو إنشاء حساب المدير
+async function changeAdminPassword() {
+  const currentPasswordInput = document.getElementById("currentPassword");
+  const currentPassword = currentPasswordInput ? currentPasswordInput.value : "";
+  const newPassword = document.getElementById("newPassword").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
+  const errorDiv = document.getElementById("passwordError");
+  const successDiv = document.getElementById("passwordSuccess");
+  
+  // إخفاء الرسائل السابقة
+  if (errorDiv) errorDiv.style.display = "none";
+  if (successDiv) successDiv.style.display = "none";
+  
+  // التحقق من صحة البيانات
+  if (newPassword.length < 6) {
+    if (errorDiv) {
+      errorDiv.textContent = "كلمة المرور الجديدة يجب أن تكون على الأقل 6 أحرف";
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    if (errorDiv) {
+      errorDiv.textContent = "كلمة المرور الجديدة وتأكيد كلمة المرور غير متطابقين";
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+  
+  // الحصول على المستخدمين
+  let users = await getUsers();
+  const adminUser = users.find(u => u.username === "admin");
+  
+  // إذا كان حساب المدير موجوداً
+  if (adminUser) {
+    // التحقق من كلمة المرور الحالية إذا تم إدخالها
+    if (currentPassword && adminUser.password !== currentPassword) {
+      if (errorDiv) {
+        errorDiv.textContent = "كلمة المرور الحالية غير صحيحة";
+        errorDiv.style.display = "block";
+      }
+      return;
+    }
+    
+    // تحديث كلمة المرور
+    adminUser.password = newPassword;
+  } else {
+    // إنشاء حساب المدير الجديد
+    const newAdminUser = {
+      id: "admin", // استخدام "admin" كـ id
+      username: "admin",
+      password: newPassword,
+      role: "admin",
+      createdAt: new Date().toLocaleString()
+    };
+    users.push(newAdminUser);
+  }
+  
+  // حفظ المستخدمين في Firebase
+  const saveResult = await setUsers(users);
+  if (!saveResult) {
+    if (errorDiv) {
+      errorDiv.textContent = "حدث خطأ أثناء حفظ البيانات. يرجى المحاولة مرة أخرى.";
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+  
+  // حفظ كلمة المرور في Firebase
+  try {
+    if (typeof database !== 'undefined') {
+      await setFirebaseData('adminPassword', newPassword);
+    } else {
+      localStorage.setItem("adminPassword", newPassword);
+    }
+  } catch (error) {
+    console.error('Error saving admin password:', error);
+    localStorage.setItem("adminPassword", newPassword);
+  }
+  
+  // التحقق من أن البيانات تم حفظها بشكل صحيح
+  try {
+    // إعادة جلب البيانات للتأكد
+    const verifyUsers = await getUsers();
+    const verifyAdmin = verifyUsers.find(u => u.username === "admin");
+    if (!verifyAdmin || verifyAdmin.password !== newPassword) {
+      console.warn('Data verification failed, retrying...');
+      // إعادة المحاولة
+      await setUsers(users);
+    }
+  } catch (error) {
+    console.error('Error verifying saved data:', error);
+  }
+  
+  // تحديث المستخدم الحالي إذا كان هو المدير
+  if (currentUser && currentUser.username === "admin") {
+    currentUser.password = newPassword;
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  }
+  
+  // عرض رسالة النجاح
+  if (successDiv) {
+    successDiv.textContent = adminUser ? "تم تغيير كلمة المرور بنجاح!" : "تم إنشاء حساب المدير بنجاح!";
+    successDiv.style.display = "block";
+  }
+  
+  // مسح الحقول
+  if (currentPasswordInput) currentPasswordInput.value = "";
+  document.getElementById("newPassword").value = "";
+  document.getElementById("confirmPassword").value = "";
+  
+  // إخفاء رسالة النجاح بعد 3 ثوان
+  setTimeout(() => {
+    if (successDiv) successDiv.style.display = "none";
+  }, 3000);
+}
+
+// تحديث مواضع العناصر اللاصقة (sticky)
+function updateStickyPositions() {
+  const header = document.querySelector("header");
+  const navbar = document.querySelector(".navbar");
+  const filterBar = document.querySelector("#leadsFilters, #myLeadsFilters, #meetingsFilters, #myMeetingsFilters");
+  
+  let headerHeight = 70; // القيمة الافتراضية
+  let navbarHeight = 60; // القيمة الافتراضية
+  let filterHeight = 0; // القيمة الافتراضية
+  
+  if (header) {
+    headerHeight = header.offsetHeight || header.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--header-height", `${headerHeight}px`);
+  }
+  
+  if (navbar) {
+    navbarHeight = navbar.offsetHeight || navbar.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--navbar-height", `${navbarHeight}px`);
+  }
+  
+  if (filterBar) {
+    filterHeight = filterBar.offsetHeight || filterBar.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--filter-height", `${filterHeight}px`);
+  } else {
+    // إذا لم تكن هناك فلاتر، استخدم 0
+    document.documentElement.style.setProperty("--filter-height", "0px");
+  }
+  
+  // حساب الموضع الصحيح لرأس الجدول
+  const theadTop = headerHeight + navbarHeight + filterHeight;
+  document.documentElement.style.setProperty("--thead-top", `${theadTop}px`);
+}
+
+// تظليل الرابط النشط في شريط الصفحات
+function highlightActiveNav() {
+  const current = (location.pathname.split("/").pop() || "").toLowerCase();
+  const anchors = document.querySelectorAll("nav.navbar a[href]");
+  anchors.forEach(a => {
+    const href = (a.getAttribute("href") || "").toLowerCase();
+    const isActive = href === current;
+    if (isActive) {
+      a.setAttribute("aria-current", "page");
+      a.style.background = "#2E3192";
+      a.style.color = "#fff";
+      a.style.borderRadius = "6px";
+      a.style.padding = "0.35rem 0.6rem";
+      a.style.textDecoration = "none";
+      a.style.fontWeight = "600";
+    } else {
+      // لا تغيّر باقي الروابط بشكل قسري، اترك الستايل الافتراضي
+      a.removeAttribute("aria-current");
+    }
+  });
+}
+
+function formatDateForInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentMonthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return {
+    start: formatDateForInput(start),
+    end: formatDateForInput(end)
+  };
+}
+
+function parseDateInput(value, endOfDay = false) {
+  if (!value) return null;
+  const date = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00"}`);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+// ===== إشعارات: دوال مساعدة =====
+function pushNotification(type, message, targets) {
+  // targets: مصفوفة أسماء مستخدمين محددين، أو كلمات مفتاحية مثل 'leads_page'
+  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+  notifications.unshift({
+    id: Date.now().toString() + Math.random().toString(16).slice(2),
+    type,
+    message,
+    targets: Array.isArray(targets) ? targets : [targets],
+    createdAt: new Date().toISOString(),
+    readBy: []
+  });
+  localStorage.setItem("notifications", JSON.stringify(notifications));
+  renderNotificationsUI(); // تحديث فوري إن وُجدت الواجهة
+}
+
+function getUserNotifications(username) {
+  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+  return notifications.filter(n => {
+    if (!Array.isArray(n.targets)) return false;
+    // صلاحية leads_page
+    const leadsPageTarget = n.targets.includes('leads_page') && hasPermission('leads.html');
+    const isDirectTarget = n.targets.includes(username);
+    return leadsPageTarget || isDirectTarget;
+  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function markNotificationRead(id) {
+  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+  const idx = notifications.findIndex(n => n.id === id);
+  if (idx !== -1) {
+    const rb = new Set(notifications[idx].readBy || []);
+    rb.add(currentUser.username);
+    notifications[idx].readBy = Array.from(rb);
+    localStorage.setItem("notifications", JSON.stringify(notifications));
+    renderNotificationsUI();
+  }
+}
+
+function markAllNotificationsRead() {
+  const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
+  notifications.forEach(n => {
+    const rb = new Set(n.readBy || []);
+    rb.add(currentUser.username);
+    n.readBy = Array.from(rb);
+  });
+  localStorage.setItem("notifications", JSON.stringify(notifications));
+  renderNotificationsUI();
+}
+
+function getUnreadCountForUser() {
+  const list = getUserNotifications(currentUser.username);
+  return list.filter(n => !(n.readBy || []).includes(currentUser.username)).length;
+}
+
+// ===== إشعارات: واجهة المستخدم =====
+function initNotificationsUI() {
+  const header = document.querySelector("header");
+  if (!header) return;
+  let bell = document.getElementById("notifBell");
+  if (!bell) {
+    const userInfo = header.querySelector(".user-info");
+    if (!userInfo) return;
+    bell = document.createElement("div");
+    bell.id = "notifBell";
+    bell.style.display = "inline-block";
+    bell.style.margin = "0 0.5rem";
+    bell.innerHTML = `
+      <button id="notifBellBtn" title="الإشعارات" style="position:relative; border-radius:999px; padding:0.4rem 0.6rem;">
+        🔔
+        <span id="notifBadge" style="position:absolute; top:-6px; right:-6px; background:#e74c3c; color:#fff; border-radius:999px; padding:0 6px; font-size:0.75rem; display:none;">0</span>
+      </button>
+      <div id="notifDropdown" style="display:none; position:absolute; left:0; top:2.2rem; min-width:280px; background:#fff; box-shadow:0 10px 25px rgba(0,0,0,0.15); border-radius:8px; overflow:hidden;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#f6f7fb;">
+          <strong>الإشعارات</strong>
+          <button id="markAllReadBtn" class="small" style="background:#2E3192;">تعيين الكل كمقروء</button>
+        </div>
+        <div id="notifList" style="max-height:300px; overflow:auto;"></div>
+      </div>
+    `;
+    // أدخل الجرس بين اسم المستخدم وزر تسجيل الخروج
+    const userSpan = userInfo.querySelector("#currentUser");
+    const logoutBtn = userInfo.querySelector("button");
+    if (logoutBtn) {
+      userInfo.insertBefore(bell, logoutBtn);
+    } else if (userSpan) {
+      userSpan.insertAdjacentElement("afterend", bell);
+    } else {
+      userInfo.appendChild(bell);
+    }
+
+    const toggleDropdown = () => {
+      const dd = document.getElementById("notifDropdown");
+      if (!dd) return;
+      const showing = dd.style.display === "block";
+      dd.style.display = showing ? "none" : "block";
+      // القائمة متموضعة بالنسبة للجرس نفسه
+      if (!showing) dd.style.left = "0";
+    };
+
+    document.getElementById("notifBellBtn").addEventListener("click", toggleDropdown);
+    document.getElementById("markAllReadBtn").addEventListener("click", markAllNotificationsRead);
+    // أغلق عند النقر خارجاً
+    document.addEventListener("click", (e) => {
+      const dd = document.getElementById("notifDropdown");
+      const within = bell.contains(e.target);
+      if (!within && dd && dd.style.display === "block") {
+        dd.style.display = "none";
+      }
+    });
+    // عند تغيير حجم النافذة أعد ضبط محاذاة القائمة إذا كانت مفتوحة
+    window.addEventListener("resize", () => {
+      const dd = document.getElementById("notifDropdown");
+      if (dd && dd.style.display === "block") {
+        const rect = bell.getBoundingClientRect();
+        const spaceRight = window.innerWidth - rect.left;
+        if (spaceRight < 300) {
+          dd.style.left = "auto";
+          dd.style.right = "0";
+        } else {
+          dd.style.right = "auto";
+          dd.style.left = "0";
+        }
+      }
+      // تحديث مواضع العناصر اللاصقة عند تغيير حجم النافذة
+      updateStickyPositions();
+    });
+    // تحديث عند تغييرات التخزين (تبويبات متعددة)
+    window.addEventListener("storage", (e) => {
+      if (e.key === "notifications") renderNotificationsUI();
+    });
+  }
+  renderNotificationsUI();
+}
+
+function renderNotificationsUI() {
+  const badge = document.getElementById("notifBadge");
+  const listEl = document.getElementById("notifList");
+  if (!badge || !listEl || !currentUser) return;
+  const list = getUserNotifications(currentUser.username);
+  const unread = list.filter(n => !(n.readBy || []).includes(currentUser.username)).length;
+  badge.textContent = unread;
+  badge.style.display = unread > 0 ? "inline-block" : "none";
+  // بناء القائمة
+  listEl.innerHTML = list.length === 0
+    ? `<div style="padding:0.75rem; color:#777;">لا توجد إشعارات</div>`
+    : list.slice(0, 15).map(n => {
+        const read = (n.readBy || []).includes(currentUser.username);
+        return `
+          <div style="padding:0.75rem; border-bottom:1px solid #eee; background:${read ? '#fff' : '#f3f6ff'};">
+            <div style="font-size:0.9rem; color:#333; margin-bottom:0.25rem;">${escapeHtml(n.message)}</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <small style="color:#888;">${formatDateTime(n.createdAt)}</small>
+              ${read ? '' : `<button class="small" onclick="markNotificationRead('${n.id}')" style="background:#27ae60;">تم</button>`}
+            </div>
+          </div>
+        `;
+      }).join("");
+}
+
+// لوحة التحكم
+async function initDashboard() {
+  await loadCurrentUser();
+  if (!checkPagePermission("dashboard.html")) return;
+  updateStats();
+  loadRecent();
+}
+
+function updateStats() {
+  const leads = JSON.parse(localStorage.getItem("leads"));
+  document.getElementById("totalLeads").textContent = leads.length;
+  document.getElementById("newCount").textContent = leads.filter(l => l.status === "new").length;
+  document.getElementById("inProgress").textContent = leads.filter(l => l.status === "in-progress").length;
+  const failedEl = document.getElementById("failedCount");
+  if (failedEl) {
+    failedEl.textContent = leads.filter(l => l.status === "failed").length;
+  }
+  document.getElementById("done").textContent = leads.filter(l => l.status === "done").length;
+}
+
+function loadRecent() {
+  let leads = JSON.parse(localStorage.getItem("leads"))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5);
+  const tbody = document.querySelector("#recentTable tbody");
+  tbody.innerHTML = "";
+  leads.forEach(lead => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(lead.company)}</td>
+      <td>${formatPhoneWithIcons(lead.phone)}</td>
+      <td>${getTypeText(lead.type)}</td>
+      <td><span class="status ${lead.status}">${getStatusText(lead.status)}</span></td>
+      <td>${lead.assignedTo || "-"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// صفحة العملاء
+async function initLeadsPage() {
+  await loadCurrentUser();
+  if (!checkPagePermission("leads.html")) return;
+  ensureLeadsFiltersUI();
+  loadLeadsTable();
+  document.getElementById("addLeadForm").addEventListener("submit", addLead);
+  document.getElementById("editLeadForm").addEventListener("submit", updateLead);
+  // تحديث مواضع العناصر اللاصقة
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 200);
+  // إضافة مربع اختيار "جعل العميل للجميع" مع افتراض الإضافة لنفسي فقط
+  const addForm = document.getElementById("addLeadForm");
+  if (addForm && !document.getElementById("addForAllCheckbox")) {
+    const wrapper = document.createElement("div");
+    wrapper.style.marginTop = "0.5rem";
+    wrapper.innerHTML = `
+      <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.5rem 0.75rem; border-radius:6px; font-size:0.9rem;">
+        <input type="checkbox" id="addForAllCheckbox" />
+        جعل هذا العميل متاحًا للجميع (غير مخصص)
+      </label>
+      <small style="color:#777; line-height:1.4; display:block; margin-top:0.25rem;">بالوضع الافتراضي سيتم إضافة العميل لك فقط. فعّل هذا الخيار لجعله متاحًا للجميع.</small>
+    `;
+    addForm.appendChild(wrapper);
+  }
+}
+
+function ensureLeadsFiltersUI() {
+  const table = document.getElementById("leadsTable");
+  if (!table) return;
+  if (!document.getElementById("leadsFilters")) {
+    const bar = document.createElement("div");
+    bar.id = "leadsFilters";
+    bar.style.display = "flex";
+    bar.style.flexWrap = "wrap";
+    bar.style.gap = "0.5rem";
+    bar.style.margin = "0.75rem 0";
+    bar.style.background = "#f6f7fb";
+    bar.style.padding = "0.6rem";
+    bar.style.borderRadius = "8px";
+    bar.innerHTML = `
+      <select id="leadsTypeFilter" style="min-width:180px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل الأنواع</option>
+        <option value="cold">Cold Lead</option>
+        <option value="hot">Hot Lead</option>
+        <option value="hunt">Hunt Lead</option>
+      </select>
+      <select id="leadsResponseFilter" style="min-width:200px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل حالات الرد</option>
+        <option value="لم يتم المحاوله">لم يتم المحاوله</option>
+        <option value="تم الرد">تم الرد</option>
+        <option value="لم يتم الرد">لم يتم الرد</option>
+        <option value="اعاده التواصل">اعاده التواصل</option>
+      </select>
+      <select id="leadsCallFilter" style="min-width:200px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل حالات المكالمة</option>
+        <option value="new">جديد</option>
+        <option value="failed">لم يتم التحويل</option>
+        <option value="done">تم التحويل</option>
+      </select>
+      <input type="date" id="leadsDateFrom" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <input type="date" id="leadsDateTo" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <input type="text" id="leadsSearchInput" placeholder="بحث باسم الشركة أو الهاتف" style="min-width:220px; padding:0.4rem 0.6rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <button id="leadsResetFilters" class="small" style="margin-inline-start:auto; background:#e67e22; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">مسح الفلاتر</button>
+    `;
+    table.parentElement.insertBefore(bar, table);
+    const { start, end } = getCurrentMonthRange();
+    const leadsDateFrom = document.getElementById("leadsDateFrom");
+    const leadsDateTo = document.getElementById("leadsDateTo");
+    if (leadsDateFrom && !leadsDateFrom.value) leadsDateFrom.value = start;
+    if (leadsDateTo && !leadsDateTo.value) leadsDateTo.value = end;
+    ["leadsTypeFilter","leadsResponseFilter","leadsCallFilter","leadsDateFrom","leadsDateTo"].forEach(id => {
+      document.getElementById(id).addEventListener("change", loadLeadsTable);
+    });
+    document.getElementById("leadsSearchInput").addEventListener("input", loadLeadsTable);
+    document.getElementById("leadsResetFilters").addEventListener("click", () => {
+      const typeSel = document.getElementById("leadsTypeFilter");
+      const respSel = document.getElementById("leadsResponseFilter");
+      const callSel = document.getElementById("leadsCallFilter");
+      const dateFrom = document.getElementById("leadsDateFrom");
+      const dateTo = document.getElementById("leadsDateTo");
+      const searchInput = document.getElementById("leadsSearchInput");
+      if (typeSel) typeSel.value = "";
+      if (respSel) respSel.value = "";
+      if (callSel) callSel.value = "";
+      if (dateFrom) dateFrom.value = "";
+      if (dateTo) dateTo.value = "";
+      if (searchInput) searchInput.value = "";
+      loadLeadsTable();
+    });
+    
+    // تحديث مواضع العناصر اللاصقة بعد إنشاء الفلاتر
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 100);
+  }
+}
+
+function addLead(e) {
+  e.preventDefault();
+  const leads = JSON.parse(localStorage.getItem("leads"));
+  const forAll = !!document.getElementById("addForAllCheckbox")?.checked;
+  const newLead = {
+    id: Date.now().toString(),
+    company: document.getElementById("company").value.trim(),
+    phone: document.getElementById("phone").value.trim(),
+    storeLink: document.getElementById("storeLink").value.trim() || "-",
+    type: document.getElementById("type").value,
+    status: "new",
+    assignedTo: forAll ? null : currentUser.username,
+    enteredBy: currentUser.username,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // حالة الرد الافتراضية
+    responseStatus: "لم يتم المحاوله",
+    responseStatusUpdatedAt: new Date().toISOString(),
+    notes: ""
+  };
+  leads.push(newLead);
+  localStorage.setItem("leads", JSON.stringify(leads));
+  closeModal();
+  loadLeadsTable();
+  // إشعار: عميل جديد
+  pushNotification("new_lead", `تم إضافة عميل جديد: ${newLead.company}`, ["leads_page"]);
+}
+
+// صفحة العملاء - جميع العملاء
+function loadLeadsTable() {
+  let leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  const isSales = currentUser.role === "sales" || currentUser.role === "telesales";
+
+  // تحويل جميع حالات in-progress إلى failed
+  let needsUpdate = false;
+  leads.forEach(lead => {
+    if (lead.status === "in-progress") {
+      lead.status = "failed";
+      lead.updatedAt = new Date().toISOString();
+      needsUpdate = true;
+    }
+  });
+  if (needsUpdate) {
+    localStorage.setItem("leads", JSON.stringify(leads));
+  }
+
+  // تطبيق منطق الإرجاع التلقائي قبل العرض
+  autoReturnUnansweredLeads(leads);
+
+  leads.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  // إظهار فقط العملاء الجدد للسيلز
+  if (isSales) {
+    leads = leads.filter(l => l.status === "new" && !l.assignedTo);
+  } else if (isManager) {
+    // المدير يرى: العملاء غير المخصصين + عملائه + عملاء من يرأسهم
+    const users = JSON.parse(localStorage.getItem("users") || "[]");
+    // الحصول على قائمة المستخدمين الذين يرأسهم المدير
+    const managedUsers = users
+      .filter(user => user.manager === currentUser.username)
+      .map(user => user.username);
+    
+    leads = leads.filter(l => {
+      // العملاء غير المخصصين
+      if (!l.assignedTo) return true;
+      // عملائه الشخصية
+      if (l.assignedTo === currentUser.username) return true;
+      // عملاء من يرأسهم
+      if (managedUsers.includes(l.assignedTo)) return true;
+      return false;
+    });
+  } else if (!isAdmin) {
+    leads = leads.filter(l => l.status === "new" || l.assignedTo === currentUser.username);
+  }
+
+  // تطبيق فلاتر الصفحة
+  const typeFilter = document.getElementById("leadsTypeFilter")?.value || "";
+  const responseFilter = document.getElementById("leadsResponseFilter")?.value || "";
+  const callFilter = document.getElementById("leadsCallFilter")?.value || "";
+  const dateFromStr = document.getElementById("leadsDateFrom")?.value || "";
+  const dateToStr = document.getElementById("leadsDateTo")?.value || "";
+  const searchQuery = (document.getElementById("leadsSearchInput")?.value || "").trim().toLowerCase();
+  const dateFrom = parseDateInput(dateFromStr);
+  const dateTo = parseDateInput(dateToStr, true);
+  leads = leads.filter(l => {
+    const typeOk = !typeFilter || l.type === typeFilter;
+    const resp = l.responseStatus || "لم يتم المحاوله";
+    const responseOk = !responseFilter || resp === responseFilter;
+    // تحويل in-progress إلى failed للفلترة
+    const leadStatus = (l.status === "in-progress") ? "failed" : l.status;
+    const callOk = !callFilter || leadStatus === callFilter;
+    const createdAt = l.createdAt ? new Date(l.createdAt) : null;
+    const dateOk = (!dateFrom || (createdAt && createdAt >= dateFrom)) &&
+                   (!dateTo || (createdAt && createdAt <= dateTo));
+    const company = (l.company || "").toLowerCase();
+    const phone = (l.phone || "").toLowerCase();
+    const searchOk = !searchQuery || company.includes(searchQuery) || phone.includes(searchQuery);
+    return typeOk && responseOk && callOk && dateOk && searchOk;
+  });
+
+  const leadsCountEl = document.getElementById("leadsCount");
+  if (leadsCountEl) {
+    leadsCountEl.textContent = leads.length;
+  }
+
+  const tbody = document.querySelector("#leadsTable tbody");
+  tbody.innerHTML = "";
+
+  // من يمكن التوجيه لهم بحسب الدور (للمدير ورئيس القسم)
+  let assignableUsers = [];
+  const usersAll = JSON.parse(localStorage.getItem("users") || "[]");
+  if (isManager) {
+    // موظفو المدير + المدير نفسه
+    assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
+    const selfUser = usersAll.find(u => u.username === currentUser.username);
+    if (selfUser) {
+      const exists = assignableUsers.some(u => u.username === selfUser.username);
+      if (!exists) assignableUsers.push(selfUser);
+    }
+  } else if (isAdmin) {
+    // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
+    assignableUsers = usersAll.slice();
+  }
+
+  leads.forEach((lead, index) => {
+    const canAssign = lead.status === "new" && !lead.assignedTo;
+    const isMine = lead.assignedTo === currentUser.username;
+    const canEdit = isMine || isAdmin || isManager;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${formatDateTime(lead.createdAt)}</td>
+      <td>${escapeHtml(lead.company)}</td>
+      <td>${formatPhoneWithIcons(lead.phone)}</td>
+      <td>${lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">رابط</a>` : "-"}</td>
+      <td>${getTypeText(lead.type)}</td>
+      <td><span class="status">${getResponseStatusText(lead.responseStatus)}</span></td>
+      <td><span class="status ${lead.status}">${getStatusText(lead.status)}</span></td>
+      <td>${lead.assignedTo || "-"}</td>
+      <td class="notes-cell">
+        <span class="notes-display" title="${escapeHtml(lead.notes || '')}" style="cursor: help;">${escapeHtml(lead.notes.substring(0, 50))}${lead.notes.length > 50 ? "..." : ""}</span>
+      </td>
+      <td>
+        ${(() => {
+          const buttons = [];
+          if (canEdit) buttons.push({html: `<button onclick="showEditLeadModal('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تعديل</button>`});
+          if (canAssign) buttons.push({html: `<button onclick="assignToMe('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">أنا سأتابع</button>`});
+          if (isManager || isAdmin) {
+            buttons.push({html: `
+              <div style="padding:0.5rem; border-bottom:1px solid #f0f0f0;">
+                <select id="assignLeadTo_${lead.id}" style="width:100%; padding:0.4rem; margin-bottom:0.5rem; border:1px solid #ddd; border-radius:4px;">
+                  <option value="">— اختر موظف —</option>
+                  ${assignableUsers.map(u => `<option value="${u.username}">${u.username} (${getRoleText(u.role)})</option>`).join('')}
+                </select>
+                <button onclick="assignLeadToUser('${lead.id}', document.getElementById('assignLeadTo_${lead.id}').value); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));" style="width:100%; padding:0.5rem; background:#2E3192; color:#fff; border:none; border-radius:4px; cursor:pointer;">توجيه</button>
+              </div>
+            `});
+          }
+          return createActionsMenu(buttons, typeof lead !== 'undefined' ? lead.id : (typeof m !== 'undefined' ? m.id : Date.now()));
+        })()}
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// === دوال Excel ===
+function downloadExcelTemplate() {
+  // إنشاء قالب Excel
+  const templateData = [
+    ['اسم الشركة', 'رقم الهاتف', 'رابط المتجر (اختياري)', 'ملاحظات (اختياري)']
+  ];
+  
+  const ws = XLSX.utils.aoa_to_sheet(templateData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "العملاء");
+  
+  // تحميل الملف
+  XLSX.writeFile(wb, "قالب_العملاء.xlsx");
+}
+
+function importFromExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+      
+      // تخطي الصف الأول (العناوين)
+      const rows = jsonData.slice(1).filter(row => row.length > 0 && row[0]);
+      
+      if (rows.length === 0) {
+        alert("لا توجد بيانات في الملف");
+        return;
+      }
+      
+      // عرض نافذة لاختيار النوع أولاً
+      showImportTypeSelection(rows);
+    } catch (error) {
+      alert("حدث خطأ في قراءة الملف: " + error.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  
+  // إعادة تعيين input
+  event.target.value = '';
+}
+
+function showImportTypeSelection(rows) {
+  // حفظ البيانات مؤقتاً في localStorage
+  const tempKey = "temp_import_rows_" + Date.now();
+  localStorage.setItem(tempKey, JSON.stringify(rows));
+  
+  // إنشاء modal لاختيار النوع
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.display = "block";
+  modal.innerHTML = `
+    <div class="modal-content">
+      <span class="close" onclick="this.parentElement.parentElement.remove(); localStorage.removeItem('${tempKey}');">×</span>
+      <h2>اختر نوع العملاء</h2>
+      <p style="margin: 1rem 0; color: #555;">سيتم تطبيق النوع المحدد على جميع العملاء المستوردين (${rows.length} عميل)</p>
+      <select id="importTypeSelect" style="width: 100%; padding: 0.5rem; margin: 1rem 0; font-size: 1rem;">
+        <option value="cold">Cold Lead</option>
+        <option value="hot">Hot Lead</option>
+        <option value="hunt">Hunt Lead</option>
+      </select>
+      <div style="display: flex; gap: 1rem;">
+        <button id="confirmTypeBtn" style="background: #27ae60; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">التالي</button>
+        <button onclick="this.closest('.modal').remove(); localStorage.removeItem('${tempKey}');" style="background: #95a5a6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">إلغاء</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  // إضافة مستمع للزر
+  document.getElementById("confirmTypeBtn").addEventListener("click", function() {
+    const selectedType = document.getElementById("importTypeSelect").value;
+    const savedRows = JSON.parse(localStorage.getItem(tempKey) || "[]");
+    localStorage.removeItem(tempKey);
+    modal.remove();
+    // الانتقال إلى اختيار المستخدم
+    showImportUserSelection(savedRows, selectedType);
+  });
+}
+
+function showImportUserSelection(rows, selectedType) {
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  const isSales = currentUser.role === "sales" || currentUser.role === "telesales";
+  
+  // إذا كان المستخدم سيلز أو تلي سيلز، اعرض خيار الاستيراد لنفسه أو للجميع
+  if (isSales) {
+    const tempKey = "temp_import_rows_" + Date.now();
+    localStorage.setItem(tempKey, JSON.stringify({ rows, type: selectedType }));
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.style.display = "block";
+    modal.innerHTML = `
+      <div class="modal-content">
+        <span class="close" onclick="this.parentElement.parentElement.remove(); localStorage.removeItem('${tempKey}');">×</span>
+        <h2>خيارات الاستيراد</h2>
+        <p style="margin: 0.5rem 0; color: #555;">النوع المحدد: <strong>${getTypeText(selectedType)}</strong></p>
+        <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.75rem; border-radius:6px; font-size:0.9rem;">
+          <input type="checkbox" id="importGeneralCheckboxSimple">
+          جعل العملاء متاحين لجميع الموظفين (غير مخصص)
+        </label>
+        <small style="color:#777; line-height:1.4;">بالوضع الافتراضي سيتم تعيين العملاء لك فقط. فعّل هذا الخيار لجعلهم متاحين للجميع.</small>
+        <div style="display:flex; gap:1rem; margin-top:1rem;">
+          <button id="confirmImportBtnSimple" style="background:#27ae60; color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:5px; cursor:pointer; flex:1;">استيراد</button>
+          <button onclick="this.closest('.modal').remove(); localStorage.removeItem('${tempKey}');" style="background:#95a5a6; color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:5px; cursor:pointer; flex:1;">إلغاء</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById("confirmImportBtnSimple").addEventListener("click", function() {
+      const saved = JSON.parse(localStorage.getItem(tempKey) || "{}");
+      const general = !!document.getElementById("importGeneralCheckboxSimple")?.checked;
+      localStorage.removeItem(tempKey);
+      modal.remove();
+      importLeadsFromExcel(saved.rows || [], general ? null : currentUser.username, saved.type);
+    });
+    return;
+  }
+  
+  // إذا كان admin أو manager، نعرض قائمة لاختيار المستخدم
+  if (isAdmin || isManager) {
+    const users = JSON.parse(localStorage.getItem("users") || "[]");
+    let availableUsers = [];
+    
+    if (isAdmin) {
+      // Admin يمكنه اختيار أي مستخدم
+      availableUsers = users.filter(u => u.username !== "admin");
+    } else if (isManager) {
+      // Manager يمكنه اختيار نفسه أو من يرأسهم
+      availableUsers = users.filter(u => 
+        u.username === currentUser.username || 
+        (u.manager === currentUser.username && u.username !== "admin")
+      );
+    }
+    
+    // حفظ البيانات مؤقتاً في localStorage
+    const tempKey = "temp_import_data_" + Date.now();
+    localStorage.setItem(tempKey, JSON.stringify({ rows, type: selectedType }));
+    
+    const optionsHtml = availableUsers.length > 0
+      ? availableUsers.map(u => `<option value="${u.username}">${u.username} (${getRoleText(u.role)})</option>`).join('')
+      : '<option value="" disabled selected>لا يوجد مستخدمين متاحين للاختيار</option>';
+
+    // إنشاء modal لاختيار المستخدم أو جعله متاحاً للجميع
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.style.display = "block";
+    modal.innerHTML = `
+      <div class="modal-content">
+        <span class="close" onclick="this.parentElement.parentElement.remove(); localStorage.removeItem('${tempKey}');">×</span>
+        <h2>اختر المستخدم لتعيين العملاء له</h2>
+        <p style="margin: 0.5rem 0; color: #555;">النوع المحدد: <strong>${getTypeText(selectedType)}</strong></p>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <select id="importUserSelect" style="width: 100%; padding: 0.5rem; font-size: 1rem;">
+            ${optionsHtml}
+          </select>
+          <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.75rem; border-radius:6px; font-size:0.9rem;">
+            <input type="checkbox" id="importGeneralCheckbox">
+            جعل العملاء متاحين لجميع الموظفين (غير مخصص)
+          </label>
+          <small style="color:#777; line-height:1.4;">في حال تفعيل هذا الخيار سيتم إضافة العملاء كعُملاء غير مخصصين ويمكن لأي موظف اختيارهم لاحقاً من صفحة "جميع العملاء".</small>
+        </div>
+        <div style="display: flex; gap: 1rem;">
+          <button id="confirmImportBtn" style="background: #27ae60; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">استيراد</button>
+          <button onclick="this.closest('.modal').remove(); localStorage.removeItem('${tempKey}');" style="background: #95a5a6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">إلغاء</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // إضافة مستمع للزر
+    const userSelect = document.getElementById("importUserSelect");
+    const generalCheckbox = document.getElementById("importGeneralCheckbox");
+
+    const toggleSelectState = () => {
+      if (!generalCheckbox || !userSelect) return;
+      const disabled = generalCheckbox.checked;
+      userSelect.disabled = disabled;
+      userSelect.style.opacity = disabled ? "0.6" : "1";
+    };
+
+    if (generalCheckbox) {
+      generalCheckbox.addEventListener("change", toggleSelectState);
+    }
+
+    // إذا لم يكن هناك مستخدمون متاحون، فعّل الخيار العام تلقائياً
+    if (availableUsers.length === 0 && generalCheckbox) {
+      generalCheckbox.checked = true;
+      generalCheckbox.disabled = true;
+    }
+    // اجعل الاختيار الافتراضي للمستخدم الحالي (نفس الفكرة: لنفسي أولاً)
+    if (userSelect) {
+      const hasCurrent = Array.from(userSelect.options).some(opt => opt.value === currentUser.username);
+      if (hasCurrent) {
+        userSelect.value = currentUser.username;
+      } else if (userSelect.options.length > 0 && !generalCheckbox?.checked) {
+        // ابقِ على أول خيار متاح إن لم يكن المستخدم الحالي ضمن القائمة
+        userSelect.selectedIndex = 0;
+      }
+    }
+    toggleSelectState();
+
+    document.getElementById("confirmImportBtn").addEventListener("click", function() {
+      if (generalCheckbox && !generalCheckbox.checked) {
+        if (!userSelect || !userSelect.value) {
+          alert("يرجى اختيار مستخدم لتعيين العملاء له أو تفعيل خيار جعلهم متاحين للجميع.");
+          return;
+        }
+      }
+      const savedData = JSON.parse(localStorage.getItem(tempKey) || "{}");
+      const assignedUser = generalCheckbox && generalCheckbox.checked ? null : (userSelect ? userSelect.value : null);
+      localStorage.removeItem(tempKey);
+      modal.remove();
+      importLeadsFromExcel(savedData.rows || [], assignedUser, savedData.type);
+    });
+  }
+}
+
+function importLeadsFromExcel(rows, assignedTo, selectedType) {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
+  
+  rows.forEach((row, index) => {
+    try {
+      const company = (row[0] || "").toString().trim();
+      const phone = (row[1] || "").toString().trim();
+      const storeLink = (row[2] || "").toString().trim() || "-";
+      const notes = (row[3] || "").toString().trim() || "";
+      
+      // التحقق من البيانات المطلوبة
+      if (!company || !phone) {
+        errors.push(`الصف ${index + 2}: اسم الشركة ورقم الهاتف مطلوبان`);
+        errorCount++;
+        return;
+      }
+      
+      // استخدام النوع المحدد من المستخدم
+      const validTypes = ["cold", "hot", "hunt"];
+      const finalType = validTypes.includes(selectedType) ? selectedType : "cold";
+      
+      const finalAssignedTo = assignedTo ? assignedTo : null;
+
+      const newLead = {
+        id: Date.now().toString() + index,
+        company: company,
+        phone: phone,
+        storeLink: storeLink,
+        type: finalType,
+        status: "new",
+        assignedTo: finalAssignedTo,
+        enteredBy: currentUser.username,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        // حالة الرد الافتراضية
+        responseStatus: "لم يتم المحاوله",
+        responseStatusUpdatedAt: new Date().toISOString(),
+        notes: notes,
+        convertedToMeeting: false
+      };
+      
+      leads.push(newLead);
+      successCount++;
+    } catch (error) {
+      errors.push(`الصف ${index + 2}: ${error.message}`);
+      errorCount++;
+    }
+  });
+  
+  localStorage.setItem("leads", JSON.stringify(leads));
+  
+  // عرض النتيجة
+  let message = `تم استيراد ${successCount} عميل بنجاح`;
+  if (assignedTo === null) {
+    message += `\n\nتم إضافة العملاء كعُملاء غير مخصصين ومتاحة لجميع الموظفين.`;
+  } else if (assignedTo) {
+    message += `\n\nتم تعيين العملاء للمستخدم: ${assignedTo}`;
+  }
+  if (errorCount > 0) {
+    message += `\n\nحدثت ${errorCount} أخطاء:\n${errors.slice(0, 5).join('\n')}`;
+    if (errors.length > 5) {
+      message += `\n... و ${errors.length - 5} أخطاء أخرى`;
+    }
+  }
+  alert(message);
+  
+  // إعادة تحميل الجدول
+  loadLeadsTable();
+
+  // إشعار: استيراد عملاء
+  if (successCount > 0) {
+    pushNotification("new_lead", `تم استيراد ${successCount} عميل جديد`, ["leads_page"]);
+  }
+}
+
+function assignToMe(id) {
+  const leads = JSON.parse(localStorage.getItem("leads"));
+  const lead = leads.find(l => l.id === id);
+  if (lead.assignedTo) return alert("المستخدم موجود مسبقًا");
+  lead.assignedTo = currentUser.username;
+  lead.status = "in-progress";
+  lead.updatedAt = new Date().toISOString();
+  localStorage.setItem("leads", JSON.stringify(leads));
+  loadLeadsTable();
+}
+
+// توجيه عميل إلى موظف محدد بواسطة المدير ورئيس القسم
+function assignLeadToUser(id, username) {
+  if (!username) {
+    alert("يرجى اختيار موظف لتوجيه العميل له");
+    return;
+  }
+  if (!(currentUser.role === "manager" || currentUser.role === "admin")) {
+    alert("غير مصرح لك بهذا الإجراء");
+    return;
+  }
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === id);
+  if (!lead) return;
+
+  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const targetUser = users.find(u => u.username === username);
+  if (!targetUser) {
+    alert("يرجى اختيار مستخدم صالح");
+    return;
+  }
+
+  // قواعد السماح بإعادة التوجيه:
+  // - العملاء بحالة new: مسموح توجيهها لمن تنطبق عليه الصلاحيات أدناه
+  // - العملاء بغير حالة new: مسموح للـ admin إعادة توجيهها لأي مستخدم،
+  //   ومسموح للمدير إعادة توجيهها لنفسه أو لأي موظف تحت إدارته
+  if (lead.status !== "new") {
+    const isAdmin = currentUser.role === "admin";
+    const managerCanAssignToTarget = currentUser.role === "manager" && (targetUser.username === currentUser.username || targetUser.manager === currentUser.username);
+    if (!(isAdmin || managerCanAssignToTarget)) {
+      alert("لا يمكنك إعادة توجيه هذا العميل إلا لنفسك أو لموظف تحت إدارتك.");
+      return;
+    }
+  }
+
+  // تحقق العلاقة في حالة المدير فقط (مع السماح بالتوجيه لنفسه)
+  if (currentUser.role === "manager") {
+    const isSelf = targetUser.username === currentUser.username;
+    if (!isSelf && targetUser.manager !== currentUser.username) {
+      alert("لا يمكنك توجيه العميل إلا لموظف تحت إدارتك أو لنفسك");
+      return;
+    }
+  }
+
+  lead.assignedTo = username;
+  lead.status = "in-progress";
+  lead.updatedAt = new Date().toISOString();
+  localStorage.setItem("leads", JSON.stringify(leads));
+  loadLeadsTable();
+  alert(`تم توجيه العميل إلى ${username}`);
+
+  // إشعار: توجيه عميل لمستخدم محدد (لا ترسل للمرسل إذا كان يوجه لنفسه)
+  if (username !== currentUser.username) {
+    pushNotification("lead_assigned", `تم توجيه عميل إليك: ${lead.company}`, [username]);
+  }
+}
+
+// توزيع الاجتماعات تلقائياً على الموظفين بالتساوي حسب الإعدادات
+function assignMeetingToSalesEqually(meetings) {
+  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const settings = getSystemSettings();
+  const distributionMode = settings.meetingDistributionMode || "sales_and_telesales";
+  
+  // تحديد نوع الموظفين حسب الإعدادات
+  let eligibleUsers = [];
+  if (distributionMode === "sales_only") {
+    eligibleUsers = users.filter(u => u.role === "sales");
+  } else if (distributionMode === "telesales_only") {
+    eligibleUsers = users.filter(u => u.role === "telesales");
+  } else if (distributionMode === "sales_and_telesales") {
+    eligibleUsers = users.filter(u => u.role === "sales" || u.role === "telesales");
+  }
+  
+  // إذا لم يكن هناك موظفين مؤهلين، لا يتم التخصيص
+  if (eligibleUsers.length === 0) {
+    return null;
+  }
+  
+  // حساب عدد الاجتماعات لكل موظف
+  const meetingCounts = {};
+  eligibleUsers.forEach(user => {
+    meetingCounts[user.username] = meetings.filter(m => m.assignedTo === user.username).length;
+  });
+  
+  // العثور على الموظف الذي لديه أقل عدد اجتماعات
+  let minCount = Infinity;
+  let selectedUser = null;
+  
+  eligibleUsers.forEach(user => {
+    const count = meetingCounts[user.username] || 0;
+    if (count < minCount) {
+      minCount = count;
+      selectedUser = user.username;
+    }
+  });
+  
+  // إذا كان هناك تعادل، نختار الأول في القائمة
+  if (selectedUser) {
+    return selectedUser;
+  }
+  
+  return null;
+}
+
+function updateLeadStatus(id, status, callback) {
+  const leads = JSON.parse(localStorage.getItem("leads"));
+  const lead = leads.find(l => l.id === id);
+  // تحويل "in-progress" إلى "failed" إذا كان موجوداً
+  if (lead.status === "in-progress") {
+    lead.status = "failed";
+  } else {
+    lead.status = status;
+  }
+  lead.updatedAt = new Date().toISOString();
+  localStorage.setItem("leads", JSON.stringify(leads));
+  if (callback && typeof callback === 'function') {
+    callback();
+  } else {
+    loadLeadsTable();
+  }
+}
+
+function editNotes(id, callback) {
+  const leads = JSON.parse(localStorage.getItem("leads"));
+  const lead = leads.find(l => l.id === id);
+  const note = prompt("اكتب الملاحظات:", lead.notes);
+  if (note !== null) {
+    lead.notes = note;
+    lead.updatedAt = new Date().toISOString();
+    localStorage.setItem("leads", JSON.stringify(leads));
+    if (callback && typeof callback === 'function') {
+      callback();
+    } else {
+      loadLeadsTable();
+    }
+  }
+}
+
+// عرض نافذة منبثقة لتعديل الملاحظات (لصفحة عملائي)
+function showEditNotesModal(leadId) {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === leadId);
+  if (!lead) return;
+  
+  const modal = document.getElementById("editNotesModal");
+  if (!modal) {
+    console.error("Modal editNotesModal not found");
+    return;
+  }
+  
+  document.getElementById("editNotesLeadId").value = leadId;
+  document.getElementById("editNotesText").value = lead.notes || "";
+  modal.style.display = "block";
+}
+
+function closeNotesModal() {
+  const modal = document.getElementById("editNotesModal");
+  if (modal) {
+    modal.style.display = "none";
+    document.getElementById("editNotesLeadId").value = "";
+    document.getElementById("editNotesText").value = "";
+  }
+}
+
+// حفظ الملاحظات من النافذة المنبثقة
+function saveNotesFromModal() {
+  const leadId = document.getElementById("editNotesLeadId").value;
+  const notes = document.getElementById("editNotesText").value;
+  
+  if (!leadId) return;
+  
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === leadId);
+  if (!lead) return;
+  
+  lead.notes = notes;
+  lead.updatedAt = new Date().toISOString();
+  localStorage.setItem("leads", JSON.stringify(leads));
+  
+  closeNotesModal();
+  loadMyLeadsTable();
+}
+
+// عرض نموذج تعديل العميل
+function showEditLeadModal(leadId) {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === leadId);
+  
+  if (!lead) {
+    alert("العميل غير موجود");
+    return;
+  }
+  
+  // التحقق من الصلاحيات
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  const isMine = lead.assignedTo === currentUser.username;
+  const canEdit = isMine || isAdmin || isManager;
+  
+  if (!canEdit) {
+    alert("غير مصرح لك بتعديل هذا العميل");
+    return;
+  }
+  
+  // تعبئة النموذج
+  document.getElementById("editLeadId").value = lead.id;
+  document.getElementById("editCompany").value = lead.company;
+  document.getElementById("editPhone").value = lead.phone;
+  document.getElementById("editStoreLink").value = lead.storeLink !== "-" ? lead.storeLink : "";
+  document.getElementById("editType").value = lead.type;
+  
+  // عرض النموذج
+  document.getElementById("editLeadModal").style.display = "block";
+}
+
+// تحديث بيانات العميل
+function updateLead(e) {
+  e.preventDefault();
+  const leadId = document.getElementById("editLeadId").value;
+  const company = document.getElementById("editCompany").value.trim();
+  const phone = document.getElementById("editPhone").value.trim();
+  const storeLink = document.getElementById("editStoreLink").value.trim() || "-";
+  const type = document.getElementById("editType").value;
+  
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === leadId);
+  
+  if (!lead) {
+    alert("العميل غير موجود");
+    return;
+  }
+  
+  // التحقق من الصلاحيات مرة أخرى
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  const isMine = lead.assignedTo === currentUser.username;
+  const canEdit = isMine || isAdmin || isManager;
+  
+  if (!canEdit) {
+    alert("غير مصرح لك بتعديل هذا العميل");
+    return;
+  }
+  
+  // تحديث البيانات
+  lead.company = company;
+  lead.phone = phone;
+  lead.storeLink = storeLink;
+  lead.type = type;
+  lead.updatedAt = new Date().toISOString();
+  
+  localStorage.setItem("leads", JSON.stringify(leads));
+  
+  alert("تم تحديث بيانات العميل بنجاح!");
+  closeModal();
+  
+  // تحديث الجداول
+  if (document.getElementById("leadsTable")) {
+    loadLeadsTable();
+  }
+  if (document.getElementById("myLeadsTable")) {
+    loadMyLeadsTable();
+  }
+}
+
+function getStatusText(status) {
+  // تحويل in-progress إلى failed للعرض
+  if (status === "in-progress") {
+    status = "failed";
+  }
+  const map = {
+    "new": "جديد",
+    "in-progress": "لم يتم التحويل",
+    "failed": "لم يتم التحويل",
+    "done": "تم التحويل"
+  };
+  return map[status] || status;
+}
+
+function getResponseStatusText(value) {
+  const map = {
+    "لم يتم المحاوله": "لم يتم المحاوله",
+    "تم الرد": "تم الرد",
+    "لم يتم الرد": "لم يتم الرد",
+    "اعاده التواصل": "اعاده التواصل"
+  };
+  return map[value] || value || "لم يتم المحاوله";
+}
+
+function getResponseStatusStyle(status) {
+  const styles = {
+    "لم يتم المحاوله": "background:#7f8c8d; color:#fff;",
+    "تم الرد": "background:#27ae60; color:#fff;",
+    "لم يتم الرد": "background:#e67e22; color:#fff;",
+    "اعاده التواصل": "background:#8e44ad; color:#fff;"
+  };
+  return `${styles[status] || "background:#95a5a6; color:#fff;"} display:inline-block; padding:0.15rem 0.6rem; border-radius:999px; font-size:0.85rem;`;
+}
+
+function updateResponseStatus(id, newValue, callback) {
+  const allowedValues = ["لم يتم المحاوله","تم الرد","لم يتم الرد","اعاده التواصل"];
+  if (!allowedValues.includes(newValue)) return;
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === id);
+  if (!lead) return;
+  // منع الرجوع إلى "لم يتم المحاوله" إذا تم تغييرها من قبل
+  if (newValue === "لم يتم المحاوله" && lead.responseStatus && lead.responseStatus !== "لم يتم المحاوله") {
+    alert("لا يمكن الرجوع إلى حالة 'لم يتم المحاوله'");
+    if (typeof callback === 'function') callback();
+    return;
+  }
+  lead.responseStatus = newValue;
+  lead.responseStatusUpdatedAt = new Date().toISOString();
+  lead.updatedAt = new Date().toISOString();
+  // إعادة تعيين تحويل لاجتماع وحالة التحويل عند الرجوع إلى "لم يتم الرد" أو "اعاده التواصل"
+  if (newValue === "لم يتم الرد" || newValue === "اعاده التواصل") {
+    lead.convertedToMeeting = false;
+    // إعادة تعيين حالة التحويل إلى "لم يتم التحويل" إذا كانت "تم التحويل"
+    if (lead.status === "done") {
+      lead.status = "failed";
+    }
+  }
+  localStorage.setItem("leads", JSON.stringify(leads));
+  if (typeof callback === 'function') callback();
+}
+
+function autoReturnUnansweredLeads(leads) {
+  let changed = false;
+  const settings = getSystemSettings();
+  const hours = Math.max(1, Number(settings.autoReturnHours || 48)); // افتراضي 48 ساعة
+  const THRESHOLD_MS = hours * 60 * 60 * 1000;
+  const now = Date.now();
+  (leads || []).forEach(lead => {
+    if (lead.assignedTo && (lead.responseStatus === "لم يتم الرد")) {
+      const updatedAt = new Date(lead.responseStatusUpdatedAt || lead.updatedAt || lead.createdAt).getTime();
+      if (now - updatedAt >= THRESHOLD_MS) {
+        // إرجاع إلى القائمة العامة
+        lead.assignedTo = null;
+        lead.status = "new";
+        lead.responseStatus = "اعاده التواصل";
+        lead.responseStatusUpdatedAt = new Date().toISOString();
+        lead.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+    }
+  });
+  if (changed) {
+    localStorage.setItem("leads", JSON.stringify(leads));
+  }
+}
+
+// إعدادات النظام العامة
+function getSystemSettings() {
+  try {
+    return JSON.parse(localStorage.getItem("settings") || "{}");
+  } catch {
+    return {};
+  }
+}
+function setSystemSettings(next) {
+  localStorage.setItem("settings", JSON.stringify(next || {}));
+}
+function getTypeText(type) {
+  const map = {
+    "cold": "Cold Lead",
+    "hot": "Hot Lead",
+    "hunt": "Hunt Lead"
+  };
+  return map[type] || type;
+}
+
+function getRoleText(role) {
+  const map = {
+    "admin": "مدير",
+    "manager": "رئيس قسم",
+    "sales": "سيلز",
+    "telesales": "تلي سيلز"
+  };
+  return map[role] || role;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// دالة مساعدة لإنشاء قائمة منسدلة للأزرار
+function createActionsMenu(buttons, uniqueId) {
+  if (!buttons || buttons.length === 0) return '';
+  const menuId = 'actionsMenu_' + (uniqueId || Date.now() + '_' + Math.random().toString(36).substr(2, 9));
+  const buttonsHtml = buttons.map(btn => {
+    if (!btn || !btn.html) return '';
+    return btn.html;
+  }).filter(Boolean).join('');
+  
+  if (!buttonsHtml) return '';
+  
+  return `
+    <div class="actions-menu">
+      <button class="actions-menu-btn" onclick="toggleActionsMenu('${menuId}')" type="button">⋯</button>
+      <div class="actions-menu-dropdown" id="${menuId}">
+        ${buttonsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function toggleActionsMenu(menuId) {
+  const menu = document.getElementById(menuId);
+  if (!menu) return;
+  
+  // إغلاق جميع القوائم الأخرى
+  document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => {
+    if (m.id !== menuId) {
+      m.classList.remove('show');
+    }
+  });
+  
+  // تبديل القائمة الحالية
+  menu.classList.toggle('show');
+}
+
+// إغلاق القوائم عند النقر خارجها
+document.addEventListener('click', function(event) {
+  if (!event.target.closest('.actions-menu')) {
+    document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => {
+      menu.classList.remove('show');
+    });
+  }
+});
+
+function closeModal() {
+  document.querySelectorAll(".modal").forEach(m => m.style.display = "none");
+  document.querySelectorAll("form").forEach(f => f.reset());
+}
+
+function showAddModal() {
+  document.getElementById("addModal").style.display = "block";
+}
+
+// صفحة المستخدمين
+async function initUsersPage() {
+  await loadCurrentUser();
+  if (!checkPagePermission("users.html")) return;
+  loadUsersTable();
+  document.getElementById("addUserForm").addEventListener("submit", addUser);
+  document.getElementById("editUserForm").addEventListener("submit", editUser);
+  // لوحة إعدادات المدير: زمن إعادة تدوير "لم يتم الرد"
+  ensureAutoReturnSettingsUI();
+  
+  // إضافة مستمع لتغيير الدور لإظهار/إخفاء حقل المدير المباشر
+  document.getElementById("newRole").addEventListener("change", function() {
+    updateManagerFieldVisibility("newRole", "newManager");
+  });
+  
+  // إظهار زر تقارير جميع المستخدمين
+  const allReportsBtn = document.getElementById("allReportsBtn");
+  if (allReportsBtn) {
+    // إظهار الزر للـ admin دائماً
+    if (currentUser.role === "admin") {
+      allReportsBtn.style.display = "inline-block";
+    } else if (currentUser.role === "manager") {
+      // إظهار الزر للمدير (سيعرض تقاريره الشخصية على الأقل)
+      allReportsBtn.style.display = "inline-block";
+    }
+  }
+  document.getElementById("editRole").addEventListener("change", function() {
+    updateManagerFieldVisibility("editRole", "editManager");
+  });
+}
+
+function ensureAutoReturnSettingsUI() {
+  const isAdmin = currentUser.role === "admin";
+  // يظهر هذا الإعداد للأدمن فقط
+  if (!isAdmin) return;
+  const usersTable = document.getElementById("usersTable");
+  if (!usersTable) return;
+  if (document.getElementById("autoReturnPanel")) return;
+
+  const settings = getSystemSettings();
+  const hours = Number(settings.autoReturnHours || 48);
+
+  const panel = document.createElement("div");
+  panel.id = "autoReturnPanel";
+  panel.style.background = "#f6f7fb";
+  panel.style.padding = "0.75rem";
+  panel.style.borderRadius = "8px";
+  panel.style.margin = "0.75rem 0";
+  panel.style.display = "flex";
+  panel.style.flexWrap = "wrap";
+  panel.style.alignItems = "center";
+  panel.style.gap = "0.6rem";
+  panel.innerHTML = `
+    <strong style="margin-inline-end:0.5rem;">إعدادات إعادة تدوير المكالمات</strong>
+    <span style="color:#666;">(إرجاع العملاء بحالة "لم يتم الرد" إلى القائمة العامة بعد مدة محددة)</span>
+    <div style="display:flex; align-items:center; gap:0.4rem; margin-inline-start:auto;">
+      <label for="autoReturnHours" style="font-size:0.95rem; color:#333;">المدة بالساعات:</label>
+      <input type="number" id="autoReturnHours" min="1" step="1" value="${hours}" style="width:90px; padding:0.35rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px; text-align:center;" />
+      <button id="saveAutoReturnBtn" class="small" style="background:#2E3192; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">حفظ</button>
+    </div>
+  `;
+  usersTable.parentElement.insertBefore(panel, usersTable);
+
+  document.getElementById("saveAutoReturnBtn").addEventListener("click", () => {
+    const input = document.getElementById("autoReturnHours");
+    const val = Math.max(1, Number(input.value || 0));
+    const next = getSystemSettings();
+    next.autoReturnHours = val;
+    setSystemSettings(next);
+    alert("تم حفظ إعدادات إعادة التدوير بنجاح.");
+  });
+  
+  // إضافة لوحة التحكم في توزيع الاجتماعات
+  ensureMeetingDistributionSettingsUI();
+}
+
+function ensureMeetingDistributionSettingsUI() {
+  const isAdmin = currentUser.role === "admin";
+  // يظهر هذا الإعداد للأدمن فقط
+  if (!isAdmin) return;
+  const usersTable = document.getElementById("usersTable");
+  if (!usersTable) return;
+  if (document.getElementById("meetingDistributionPanel")) return;
+
+  const settings = getSystemSettings();
+  const distributionMode = settings.meetingDistributionMode || "sales_and_telesales"; // sales_only, telesales_only, sales_and_telesales
+
+  const panel = document.createElement("div");
+  panel.id = "meetingDistributionPanel";
+  panel.style.background = "#e8f5e9";
+  panel.style.padding = "0.75rem";
+  panel.style.borderRadius = "8px";
+  panel.style.margin = "0.75rem 0";
+  panel.style.display = "flex";
+  panel.style.flexWrap = "wrap";
+  panel.style.alignItems = "center";
+  panel.style.gap = "0.6rem";
+  panel.innerHTML = `
+    <strong style="margin-inline-end:0.5rem;">إعدادات توزيع الاجتماعات التلقائي</strong>
+    <span style="color:#666;">(تحديد من سيتم توزيع الاجتماعات عليهم تلقائياً عند التحويل)</span>
+    <div style="display:flex; align-items:center; gap:0.4rem; margin-inline-start:auto;">
+      <label for="meetingDistributionMode" style="font-size:0.95rem; color:#333;">نوع التوزيع:</label>
+      <select id="meetingDistributionMode" style="padding:0.35rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px; min-width:200px;">
+        <option value="sales_only" ${distributionMode === 'sales_only' ? 'selected' : ''}>السيلز فقط</option>
+        <option value="telesales_only" ${distributionMode === 'telesales_only' ? 'selected' : ''}>التلي سيلز فقط</option>
+        <option value="sales_and_telesales" ${distributionMode === 'sales_and_telesales' ? 'selected' : ''}>السيلز والتلي سيلز معاً</option>
+      </select>
+      <button id="saveMeetingDistributionBtn" class="small" style="background:#27ae60; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">حفظ</button>
+    </div>
+  `;
+  usersTable.parentElement.insertBefore(panel, usersTable);
+
+  document.getElementById("saveMeetingDistributionBtn").addEventListener("click", () => {
+    const select = document.getElementById("meetingDistributionMode");
+    const mode = select.value;
+    const next = getSystemSettings();
+    next.meetingDistributionMode = mode;
+    setSystemSettings(next);
+    alert("تم حفظ إعدادات توزيع الاجتماعات بنجاح.");
+  });
+}
+// تحميل قائمة رؤساء الأقسام
+function loadManagersList(selectId) {
+  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const managers = users.filter(u => u.role === "manager" || u.role === "admin");
+  const select = document.getElementById(selectId);
+  
+  // حفظ القيمة الحالية
+  const currentValue = select.value;
+  
+  // مسح الخيارات القديمة (باستثناء الخيار الأول)
+  select.innerHTML = '<option value="">-- اختر المدير المباشر --</option>';
+  
+  // إضافة رؤساء الأقسام
+  managers.forEach(manager => {
+    const option = document.createElement("option");
+    option.value = manager.username;
+    option.textContent = `${manager.username} (${getRoleText(manager.role)})`;
+    select.appendChild(option);
+  });
+  
+  // استعادة القيمة السابقة
+  if (currentValue) {
+    select.value = currentValue;
+  }
+}
+
+// إظهار/إخفاء حقل المدير المباشر حسب الدور
+function updateManagerFieldVisibility(roleSelectId, managerSelectId) {
+  const roleSelect = document.getElementById(roleSelectId);
+  const managerSelect = document.getElementById(managerSelectId);
+  
+  if (!roleSelect || !managerSelect) return;
+  
+  const role = roleSelect.value;
+  // إظهار حقل المدير المباشر فقط للدورات التي ليست مدير أو رئيس قسم
+  if (role === "sales" || role === "telesales") {
+    managerSelect.style.display = "block";
+    managerSelect.required = true;
+  } else {
+    managerSelect.style.display = "none";
+    managerSelect.required = false;
+    managerSelect.value = "";
+  }
+}
+
+function showUserModal() {
+  document.getElementById("userModal").style.display = "block";
+  // إعادة تعيين النموذج
+  document.getElementById("addUserForm").reset();
+  document.querySelectorAll('input[name="perm"]').forEach(cb => cb.checked = false);
+  // تحميل قائمة رؤساء الأقسام
+  loadManagersList("newManager");
+  // إظهار/إخفاء حقل المدير المباشر حسب الدور
+  updateManagerFieldVisibility("newRole", "newManager");
+}
+
+function showEditUserModal() {
+  const username = prompt("أدخل اسم المستخدم الذي تريد تعديله:");
+  if (!username) return;
+  
+  const users = JSON.parse(localStorage.getItem("users"));
+  const user = users.find(u => u.username === username);
+  if (!user) {
+    alert("المستخدم غير موجود");
+    return;
+  }
+  
+  if (user.username === "admin") {
+    alert("لا يمكن تعديل حساب الأدمن");
+    return;
+  }
+  
+  // تعبئة النموذج
+  document.getElementById("editUsername").value = user.username;
+  document.getElementById("editUsernameDisplay").value = user.username;
+  document.getElementById("editRole").value = user.role;
+  document.getElementById("editPassword").value = "";
+  document.getElementById("editPhone").value = user.phone || "";
+  
+  // تحميل قائمة رؤساء الأقسام وتعيين القيمة
+  loadManagersList("editManager");
+  document.getElementById("editManager").value = user.manager || "";
+  
+  // إظهار/إخفاء حقل المدير المباشر حسب الدور
+  updateManagerFieldVisibility("editRole", "editManager");
+  
+  // تعبئة الصلاحيات
+  document.querySelectorAll('input[name="permEdit"]').forEach(cb => {
+    cb.checked = (user.permissions || []).includes(cb.value);
+  });
+  
+  document.getElementById("editUserModal").style.display = "block";
+}
+
+function editUser(e) {
+  e.preventDefault();
+  const username = document.getElementById("editUsername").value;
+  const password = document.getElementById("editPassword").value;
+  const phone = document.getElementById("editPhone").value.trim();
+  const role = document.getElementById("editRole").value;
+  const manager = document.getElementById("editManager").value;
+  
+  // جمع الصلاحيات المحددة
+  const permissions = [];
+  document.querySelectorAll('input[name="permEdit"]:checked').forEach(checkbox => {
+    permissions.push(checkbox.value);
+  });
+  
+  const users = JSON.parse(localStorage.getItem("users"));
+  const userIndex = users.findIndex(u => u.username === username);
+  if (userIndex === -1) {
+    alert("المستخدم غير موجود");
+    return;
+  }
+  
+  // تحديث البيانات
+  users[userIndex].role = role;
+  users[userIndex].permissions = permissions;
+  users[userIndex].phone = phone || "";
+  users[userIndex].manager = manager || "";
+  if (password.trim()) {
+    users[userIndex].password = password;
+  }
+  
+  localStorage.setItem("users", JSON.stringify(users));
+  closeModal();
+  loadUsersTable();
+  alert("تم تحديث المستخدم بنجاح");
+}
+
+function editUserModal(username) {
+  const users = JSON.parse(localStorage.getItem("users"));
+  const user = users.find(u => u.username === username);
+  if (!user) return;
+  
+  if (user.username === "admin") {
+    alert("لا يمكن تعديل حساب الأدمن");
+    return;
+  }
+  
+  // تعبئة النموذج
+  document.getElementById("editUsername").value = user.username;
+  document.getElementById("editUsernameDisplay").value = user.username;
+  document.getElementById("editRole").value = user.role;
+  document.getElementById("editPassword").value = "";
+  document.getElementById("editPhone").value = user.phone || "";
+  
+  // تحميل قائمة رؤساء الأقسام وتعيين القيمة
+  loadManagersList("editManager");
+  document.getElementById("editManager").value = user.manager || "";
+  
+  // إظهار/إخفاء حقل المدير المباشر حسب الدور
+  updateManagerFieldVisibility("editRole", "editManager");
+  
+  // تعبئة الصلاحيات
+  document.querySelectorAll('input[name="permEdit"]').forEach(cb => {
+    cb.checked = (user.permissions || []).includes(cb.value);
+  });
+  
+  document.getElementById("editUserModal").style.display = "block";
+}
+
+function addUser(e) {
+  e.preventDefault();
+  const username = document.getElementById("newUsername").value;
+  const password = document.getElementById("newPassword").value;
+  const phone = document.getElementById("newPhone").value.trim();
+  const role = document.getElementById("newRole").value;
+  const manager = document.getElementById("newManager").value;
+
+  // جمع الصلاحيات المحددة
+  const permissions = [];
+  document.querySelectorAll('input[name="perm"]:checked').forEach(checkbox => {
+    permissions.push(checkbox.value);
+  });
+
+  const users = JSON.parse(localStorage.getItem("users"));
+  if (users.find(u => u.username === username)) {
+    alert("المستخدم موجود مسبقًا");
+    return;
+  }
+
+  users.push({
+    username,
+    password,
+    role,
+    phone: phone || "",
+    manager: manager || "",
+    permissions: permissions,
+    isActive: true, // المستخدم الجديد مفعّل افتراضياً
+    createdAt: new Date().toLocaleString()
+  });
+  localStorage.setItem("users", JSON.stringify(users));
+  closeModal();
+  loadUsersTable();
+}
+
+function loadUsersTable() {
+  const users = JSON.parse(localStorage.getItem("users"));
+  const tbody = document.querySelector("#usersTable tbody");
+  tbody.innerHTML = "";
+  
+  // تصفية المستخدمين حسب الصلاحيات
+  let filteredUsers = users;
+  
+  // إذا كان المستخدم الحالي ليس admin ولكن لديه صلاحية users.html
+  if (currentUser.role !== "admin" && hasPermission("users.html")) {
+    // يرى نفسه والمستخدمين الذين يرأسهم فقط
+    filteredUsers = users.filter(user => {
+      // إخفاء admin دائماً
+      if (user.username === "admin") return false;
+      // يرى نفسه
+      if (user.username === currentUser.username) return true;
+      // يرى المستخدمين الذين يرأسهم (الذين لديهم هذا المستخدم كمدير مباشر)
+      if (user.manager === currentUser.username) return true;
+      // لا يرى رؤساء الأقسام الآخرين
+      return false;
+    });
+  } else if (currentUser.role === "admin") {
+    // الأدمن يرى الجميع عدا نفسه (admin)
+    filteredUsers = users.filter(user => user.username !== "admin");
+  } else {
+    // إذا لم يكن لديه صلاحية، لا يرى أحداً (لكن هذا لن يحدث بسبب checkPagePermission)
+    filteredUsers = [];
+  }
+  
+  filteredUsers.forEach((user) => {
+    const permissions = user.permissions || [];
+    const permText = permissions.length > 0 
+      ? permissions.map(p => {
+          const names = {
+            "dashboard.html": "الرئيسية",
+            "leads.html": "جميع العملاء",
+            "my-leads.html": "عملائي",
+            "meetings.html": "جميع الاجتماعات",
+            "my-meetings.html": "اجتماعاتي",
+            "users.html": "المستخدمين",
+            "clear.html": "مسح البيانات"
+          };
+          return names[p] || p;
+        }).join(", ")
+      : "لا توجد صلاحيات";
+    
+    // الحصول على اسم المدير المباشر
+    const managerName = user.manager 
+      ? (users.find(u => u.username === user.manager)?.username || user.manager)
+      : "-";
+    
+    const isActive = user.isActive !== false; // افتراضياً مفعّل إذا لم يكن محدد
+    const canToggle = currentUser.role === "admin" || currentUser.role === "manager";
+    
+    const tr = document.createElement("tr");
+    tr.style.opacity = isActive ? "1" : "0.6";
+    tr.innerHTML = `
+      <td>${user.username} ${!isActive ? '<span style="color:#e74c3c; font-size:0.8rem;">(معطل)</span>' : ''}</td>
+      <td>${getRoleText(user.role)}</td>
+      <td>${user.phone || "-"}</td>
+      <td>${managerName}</td>
+      <td>${user.createdAt}</td>
+      <td style="font-size:0.85rem; max-width:200px;">${permText}</td>
+      <td>
+        <button onclick="openReports('${user.username}')" style="background:#9b59b6; margin-left:0.5rem;">تقارير</button>
+        <button onclick="editUserModal('${user.username}')" style="background:#3498db; margin-left:0.5rem;">تعديل</button>
+        ${canToggle ? `<button onclick="toggleUserStatus('${user.username}')" style="background:${isActive ? '#e67e22' : '#27ae60'}; margin-left:0.5rem;">${isActive ? 'تعطيل' : 'تفعيل'}</button>` : ""}
+        ${currentUser.role === "admin" ? `<button onclick="deleteUser('${user.username}')" style="background:#e74c3c">حذف</button>` : ""}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function deleteUser(username) {
+  if (confirm("هل تريد حذف هذا المستخدم؟")) {
+    const users = JSON.parse(localStorage.getItem("users"));
+    const index = users.findIndex(u => u.username === username);
+    if (index !== -1) {
+      users.splice(index, 1);
+      localStorage.setItem("users", JSON.stringify(users));
+      loadUsersTable();
+    }
+  }
+}
+
+// تعطيل/تفعيل المستخدم
+function toggleUserStatus(username) {
+  const users = JSON.parse(localStorage.getItem("users"));
+  const user = users.find(u => u.username === username);
+  
+  if (!user) {
+    alert("المستخدم غير موجود");
+    return;
+  }
+  
+  // التحقق من الصلاحيات
+  const canToggle = currentUser.role === "admin" || currentUser.role === "manager";
+  if (!canToggle) {
+    alert("غير مصرح لك بهذا الإجراء");
+    return;
+  }
+  
+  const isActive = user.isActive !== false; // افتراضياً مفعّل
+  const newStatus = !isActive;
+  
+  if (confirm(`هل تريد ${newStatus ? 'تفعيل' : 'تعطيل'} المستخدم "${username}"؟`)) {
+    user.isActive = newStatus;
+    localStorage.setItem("users", JSON.stringify(users));
+    loadUsersTable();
+    alert(`تم ${newStatus ? 'تفعيل' : 'تعطيل'} المستخدم بنجاح`);
+  }
+}
+
+// صفحة عملائي
+async function initMyLeads() {
+  await loadCurrentUser();
+  if (!checkPagePermission("my-leads.html")) return;
+  // تطبيق الإرجاع التلقائي قبل التحميل
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  autoReturnUnansweredLeads(leads);
+  ensureMyLeadsFiltersUI();
+  loadMyLeadsTable();
+  document.getElementById("editLeadForm")?.addEventListener("submit", updateLead);
+  // إضافة event listener لنموذج تعديل الملاحظات
+  document.getElementById("editNotesForm")?.addEventListener("submit", function(e) {
+    e.preventDefault();
+    saveNotesFromModal();
+  });
+  // تحديث مواضع العناصر اللاصقة
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 200);
+}
+
+function ensureMyLeadsFiltersUI() {
+  const table = document.getElementById("myLeadsTable");
+  if (!table) return;
+  if (!document.getElementById("myLeadsFilters")) {
+    const bar = document.createElement("div");
+    bar.id = "myLeadsFilters";
+    bar.style.display = "flex";
+    bar.style.flexWrap = "wrap";
+    bar.style.gap = "0.5rem";
+    bar.style.margin = "0.75rem 0";
+    bar.style.background = "#f6f7fb";
+    bar.style.padding = "0.6rem";
+    bar.style.borderRadius = "8px";
+    bar.innerHTML = `
+      <select id="myTypeFilter" style="min-width:180px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل الأنواع</option>
+        <option value="cold">Cold Lead</option>
+        <option value="hot">Hot Lead</option>
+        <option value="hunt">Hunt Lead</option>
+      </select>
+      <select id="myResponseFilter" style="min-width:200px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل حالات الرد</option>
+        <option value="لم يتم المحاوله">لم يتم المحاوله</option>
+        <option value="تم الرد">تم الرد</option>
+        <option value="لم يتم الرد">لم يتم الرد</option>
+        <option value="اعاده التواصل">اعاده التواصل</option>
+      </select>
+      <select id="myCallFilter" style="min-width:200px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        <option value="">كل حالات التحويل</option>
+        <option value="new">جديد</option>
+        <option value="failed">لم يتم التحويل</option>
+        <option value="done">تم التحويل</option>
+      </select>
+      <input type="date" id="myDateFrom" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <input type="date" id="myDateTo" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <input type="text" id="mySearchInput" placeholder="بحث باسم الشركة أو الهاتف" style="min-width:220px; padding:0.4rem 0.6rem; border:1px solid #dfe3ea; border-radius:6px;" />
+      <button id="myResetFilters" class="small" style="margin-inline-start:auto; background:#e67e22; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">مسح الفلاتر</button>
+    `;
+    table.parentElement.insertBefore(bar, table);
+    const { start, end } = getCurrentMonthRange();
+    const myDateFrom = document.getElementById("myDateFrom");
+    const myDateTo = document.getElementById("myDateTo");
+    if (myDateFrom && !myDateFrom.value) myDateFrom.value = start;
+    if (myDateTo && !myDateTo.value) myDateTo.value = end;
+    ["myTypeFilter","myResponseFilter","myCallFilter","myDateFrom","myDateTo"].forEach(id => {
+      document.getElementById(id).addEventListener("change", loadMyLeadsTable);
+    });
+    document.getElementById("mySearchInput").addEventListener("input", loadMyLeadsTable);
+    document.getElementById("myResetFilters").addEventListener("click", () => {
+      const typeSel = document.getElementById("myTypeFilter");
+      const respSel = document.getElementById("myResponseFilter");
+      const callSel = document.getElementById("myCallFilter");
+      const dateFrom = document.getElementById("myDateFrom");
+      const dateTo = document.getElementById("myDateTo");
+      const searchInput = document.getElementById("mySearchInput");
+      if (typeSel) typeSel.value = "";
+      if (respSel) respSel.value = "";
+      if (callSel) callSel.value = "";
+      if (dateFrom) dateFrom.value = "";
+      if (dateTo) dateTo.value = "";
+      if (searchInput) searchInput.value = "";
+      loadMyLeadsTable();
+    });
+    
+    // تحديث مواضع العناصر اللاصقة بعد إنشاء الفلاتر
+    setTimeout(() => {
+      updateStickyPositions();
+    }, 100);
+  }
+}
+
+function ensureMeetingsFiltersUI() {
+  const table = document.getElementById("meetingsTable");
+  if (!table || document.getElementById("meetingsFilters")) return;
+
+  const bar = document.createElement("div");
+  bar.id = "meetingsFilters";
+  bar.style.display = "flex";
+  bar.style.flexWrap = "wrap";
+  bar.style.gap = "0.5rem";
+  bar.style.margin = "0.75rem 0";
+  bar.style.background = "#f6f7fb";
+  bar.style.padding = "0.6rem";
+  bar.style.borderRadius = "8px";
+
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  let employeeSelectHtml = "";
+
+  if (isAdmin || isManager) {
+    const users = JSON.parse(localStorage.getItem("users") || "[]");
+    let employeeUsers = [];
+    if (isAdmin) {
+      employeeUsers = users;
+    } else {
+      employeeUsers = users.filter(u => u.manager === currentUser.username);
+      const selfUser = users.find(u => u.username === currentUser.username);
+      if (selfUser && !employeeUsers.some(u => u.username === selfUser.username)) {
+        employeeUsers.push(selfUser);
+      }
+    }
+
+    const employeeOptions = ['<option value="">كل الموظفين</option>', '<option value="__unassigned">غير مخصصة</option>']
+      .concat(employeeUsers
+        .filter(u => u.username !== "admin" || isAdmin)
+        .map(u => `<option value="${u.username}">${u.username}</option>`))
+      .join("");
+
+    employeeSelectHtml = `
+      <select id="meetingsEmployeeFilter" style="min-width:180px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+        ${employeeOptions}
+      </select>
+    `;
+  }
+
+  bar.innerHTML = `
+    <select id="meetingsTypeFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">كل الأنواع</option>
+      <option value="cold meetings">Cold</option>
+      <option value="hot meetings">Hot</option>
+      <option value="hunt meetings">Hunt</option>
+    </select>
+    <select id="meetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">دخول الاجتماع</option>
+      <option value="new">جديد</option>
+      <option value="in-progress">تحت التنفيذ</option>
+      <option value="failed">فشل دخول الاجتماع</option>
+      <option value="done">تم دخول الاجتماع</option>
+    </select>
+    <select id="meetingsConversionFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">التعاقدات</option>
+      <option value="funded">تم التعاقد</option>
+      <option value="unfunded">لم يتم التعاقد</option>
+    </select>
+    ${employeeSelectHtml}
+    <input type="date" id="meetingsDateFrom" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <input type="date" id="meetingsDateTo" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <input type="text" id="meetingsSearchInput" placeholder="بحث باسم الشركة أو الهاتف" style="min-width:220px; padding:0.4rem 0.6rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <button id="meetingsResetFilters" class="small" style="margin-inline-start:auto; background:#e67e22; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">مسح الفلاتر</button>
+  `;
+  table.parentElement.insertBefore(bar, table);
+
+  const { start, end } = getCurrentMonthRange();
+  const meetingsDateFrom = document.getElementById("meetingsDateFrom");
+  const meetingsDateTo = document.getElementById("meetingsDateTo");
+  if (meetingsDateFrom && !meetingsDateFrom.value) meetingsDateFrom.value = start;
+  if (meetingsDateTo && !meetingsDateTo.value) meetingsDateTo.value = end;
+
+  ["meetingsTypeFilter", "meetingsStatusFilter", "meetingsConversionFilter", "meetingsEmployeeFilter", "meetingsDateFrom", "meetingsDateTo"]
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", loadMeetingsTable);
+      }
+    });
+  document.getElementById("meetingsSearchInput").addEventListener("input", loadMeetingsTable);
+
+  document.getElementById("meetingsResetFilters").addEventListener("click", () => {
+    ["meetingsTypeFilter", "meetingsStatusFilter", "meetingsConversionFilter", "meetingsEmployeeFilter", "meetingsDateFrom", "meetingsDateTo"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const employeeEl = document.getElementById("meetingsEmployeeFilter");
+    if (employeeEl) employeeEl.value = "";
+    const searchInput = document.getElementById("meetingsSearchInput");
+    if (searchInput) searchInput.value = "";
+    loadMeetingsTable();
+  });
+  
+  // تحديث مواضع العناصر اللاصقة بعد إنشاء الفلاتر
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 100);
+}
+
+function ensureMyMeetingsFiltersUI() {
+  const table = document.getElementById("myMeetingsTable");
+  if (!table || document.getElementById("myMeetingsFilters")) return;
+
+  const bar = document.createElement("div");
+  bar.id = "myMeetingsFilters";
+  bar.style.display = "flex";
+  bar.style.flexWrap = "wrap";
+  bar.style.gap = "0.5rem";
+  bar.style.margin = "0.75rem 0";
+  bar.style.background = "#f6f7fb";
+  bar.style.padding = "0.6rem";
+  bar.style.borderRadius = "8px";
+  bar.innerHTML = `
+    <select id="myMeetingsTypeFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">كل الأنواع</option>
+      <option value="cold meetings">Cold</option>
+      <option value="hot meetings">Hot</option>
+      <option value="hunt meetings">Hunt</option>
+    </select>
+    <select id="myMeetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">كل حالات دخول الاجتماع</option>
+      <option value="new">جديد</option>
+      <option value="in-progress">تحت التنفيذ</option>
+      <option value="failed">فشل دخول الاجتماع</option>
+      <option value="done">تم دخول الاجتماع</option>
+    </select>
+    <select id="myMeetingsConversionFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
+      <option value="">كل التعاقدات</option>
+      <option value="funded">تم التعاقد</option>
+      <option value="unfunded">لم يتم التعاقد</option>
+    </select>
+    <input type="date" id="myMeetingsDateFrom" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <input type="date" id="myMeetingsDateTo" style="padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <input type="text" id="myMeetingsSearchInput" placeholder="بحث باسم الشركة أو الهاتف" style="min-width:220px; padding:0.4rem 0.6rem; border:1px solid #dfe3ea; border-radius:6px;" />
+    <button id="myMeetingsResetFilters" class="small" style="margin-inline-start:auto; background:#e67e22; color:#fff; padding:0.45rem 0.8rem; border:none; border-radius:6px; cursor:pointer;">مسح الفلاتر</button>
+  `;
+  table.parentElement.insertBefore(bar, table);
+
+  const { start, end } = getCurrentMonthRange();
+  const myMeetingsDateFrom = document.getElementById("myMeetingsDateFrom");
+  const myMeetingsDateTo = document.getElementById("myMeetingsDateTo");
+  if (myMeetingsDateFrom && !myMeetingsDateFrom.value) myMeetingsDateFrom.value = start;
+  if (myMeetingsDateTo && !myMeetingsDateTo.value) myMeetingsDateTo.value = end;
+
+  ["myMeetingsTypeFilter", "myMeetingsStatusFilter", "myMeetingsConversionFilter", "myMeetingsDateFrom", "myMeetingsDateTo"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("change", loadMyMeetingsTable);
+    }
+  });
+  document.getElementById("myMeetingsSearchInput").addEventListener("input", loadMyMeetingsTable);
+
+  document.getElementById("myMeetingsResetFilters").addEventListener("click", () => {
+    ["myMeetingsTypeFilter", "myMeetingsStatusFilter", "myMeetingsConversionFilter", "myMeetingsDateFrom", "myMeetingsDateTo"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const searchInput = document.getElementById("myMeetingsSearchInput");
+    if (searchInput) searchInput.value = "";
+    loadMyMeetingsTable();
+  });
+  
+  // تحديث مواضع العناصر اللاصقة بعد إنشاء الفلاتر
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 100);
+}
+
+function loadMyLeadsTable() {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  
+  // تحويل جميع حالات in-progress إلى failed
+  let needsUpdate = false;
+  leads.forEach(lead => {
+    if (lead.status === "in-progress") {
+      lead.status = "failed";
+      lead.updatedAt = new Date().toISOString();
+      needsUpdate = true;
+    }
+  });
+  if (needsUpdate) {
+    localStorage.setItem("leads", JSON.stringify(leads));
+  }
+  
+  let myLeads = leads
+    .filter(l => l.assignedTo === currentUser.username)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  // تطبيق فلاتر الصفحة
+  const typeFilter = document.getElementById("myTypeFilter")?.value || "";
+  const responseFilter = document.getElementById("myResponseFilter")?.value || "";
+  const callFilter = document.getElementById("myCallFilter")?.value || "";
+  const dateFromStr = document.getElementById("myDateFrom")?.value || "";
+  const dateToStr = document.getElementById("myDateTo")?.value || "";
+  const searchQuery = (document.getElementById("mySearchInput")?.value || "").trim().toLowerCase();
+  const dateFrom = parseDateInput(dateFromStr);
+  const dateTo = parseDateInput(dateToStr, true);
+  myLeads = myLeads.filter(l => {
+    const typeOk = !typeFilter || l.type === typeFilter;
+    const resp = l.responseStatus || "لم يتم المحاوله";
+    const responseOk = !responseFilter || resp === responseFilter;
+    // تحويل in-progress إلى failed للفلترة
+    const leadStatus = (l.status === "in-progress") ? "failed" : l.status;
+    const callOk = !callFilter || leadStatus === callFilter;
+    const createdAt = l.createdAt ? new Date(l.createdAt) : null;
+    const dateOk = (!dateFrom || (createdAt && createdAt >= dateFrom)) &&
+                   (!dateTo || (createdAt && createdAt <= dateTo));
+    const company = (l.company || "").toLowerCase();
+    const phone = (l.phone || "").toLowerCase();
+    const searchOk = !searchQuery || company.includes(searchQuery) || phone.includes(searchQuery);
+    return typeOk && responseOk && callOk && dateOk && searchOk;
+  });
+
+  document.getElementById("myCount").textContent = myLeads.length;
+
+  const tbody = document.querySelector("#myLeadsTable tbody");
+  tbody.innerHTML = "";
+
+  // الحصول على جميع الاجتماعات للبحث عن ملاحظات السيلز
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  
+  myLeads.forEach((lead, i) => {
+    const isConverted = lead.convertedToMeeting || false;
+    const canChangeCallStatus = (lead.responseStatus === "تم الرد");
+    const canConvert = !isConverted && lead.responseStatus === "تم الرد" && lead.status === "done";
+    const canShowMeetingDetails = isConverted;
+    
+    // البحث عن الاجتماع المرتبط بالعميل للحصول على ملاحظات الاجتماع (notes)
+    const relatedMeeting = meetings.find(m => m.leadId === lead.id);
+    const meetingNotes = relatedMeeting && relatedMeeting.notes ? relatedMeeting.notes : "-";
+    const meetingNotesDisplay = meetingNotes !== "-" 
+      ? `<span title="${escapeHtml(meetingNotes)}" style="cursor: help;">${escapeHtml(meetingNotes.substring(0, 100))}${meetingNotes.length > 100 ? "..." : ""}</span>`
+      : "-";
+    
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${formatDateTime(lead.createdAt)}</td>
+      <td>${escapeHtml(lead.company)}</td>
+      <td>${formatPhoneWithIcons(lead.phone)}</td>
+      <td>${lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">رابط</a>` : "-"}</td>
+      <td>${getTypeText(lead.type)}</td>
+      <td>
+        <span class="status" style="${getResponseStatusStyle(lead.responseStatus)}">${getResponseStatusText(lead.responseStatus)}</span>
+        <select onchange="updateResponseStatus('${lead.id}', this.value, loadMyLeadsTable)" style="margin-top:0.35rem; width:100%;">
+          ${['لم يتم المحاوله','تم الرد','لم يتم الرد','اعاده التواصل'].map(val => {
+            const disabledInitial = (val === 'لم يتم المحاوله' && lead.responseStatus !== 'لم يتم المحاوله');
+            const selected = (lead.responseStatus || 'لم يتم المحاوله') === val ? 'selected' : '';
+            return `<option value="${val}" ${selected} ${disabledInitial ? 'disabled' : ''}>${val}</option>`;
+          }).join('')}
+        </select>
+      </td>
+      <td>
+        <span class="status ${lead.status}">${getStatusText(lead.status)}</span>
+        <select onchange="updateLeadStatus('${lead.id}', this.value, loadMyLeadsTable)" ${canChangeCallStatus ? '' : 'disabled'} style="margin-top:0.35rem; width:100%;">
+          <option value="failed" ${lead.status === 'failed' || !lead.status || lead.status === 'in-progress' ? 'selected' : ''}>لم يتم التحويل</option>
+          <option value="done" ${lead.status === 'done' ? 'selected' : ''}>تم التحويل</option>
+        </select>
+      </td>
+      <td class="notes-cell">
+        <span class="notes-display" title="${escapeHtml(lead.notes || '')}" style="cursor: help;">${escapeHtml(lead.notes.substring(0, 30))}${lead.notes.length > 30 ? "..." : ""}</span>
+        <button onclick="showEditNotesModal('${lead.id}')" class="small">عرض</button>
+      </td>
+      <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px;">
+        ${meetingNotesDisplay}
+      </td>
+      <td>
+        ${(() => {
+          const buttons = [];
+          if (!isConverted) {
+            buttons.push({html: `<button onclick="showEditLeadModal('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تعديل</button>`});
+          }
+          if (isConverted) {
+            buttons.push({html: `<button disabled>تم التحويل</button>`});
+          } else if (canConvert) {
+            buttons.push({html: `<button onclick="startMeetingConversion('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تحويل إلى ميتنج</button>`});
+          } else {
+            buttons.push({html: `<button disabled>لا يمكن التحويل إلى ميتنج</button>`});
+          }
+          if (canShowMeetingDetails) {
+            buttons.push({html: `<button onclick="openMeetingDetailsForLead('${lead.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(m => m.classList.remove('show'));">تفاصيل الاجتماع</button>`});
+          }
+          return createActionsMenu(buttons, lead.id);
+        })()}
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// === نظام الميتنجز ===
+if (!localStorage.getItem("meetings")) {
+  localStorage.setItem("meetings", JSON.stringify([]));
+}
+
+function startMeetingConversion(leadId) {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === leadId);
+  if (!lead || lead.assignedTo !== currentUser.username) {
+    alert("غير مصرح");
+    return;
+  }
+  if (lead.convertedToMeeting) {
+    alert("تم تحويل هذا العميل إلى ميتنج مسبقاً");
+    return;
+  }
+  const canConvert = lead.responseStatus === "تم الرد" && lead.status === "done";
+  if (!canConvert) {
+    alert("لا يمكنك تحويل العميل إلى ميتنج إلا بعد ضبط حالة الرد إلى (تم الرد) وحالة المكالمة إلى (تم التحويل).");
+    return;
+  }
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const existingMeeting = meetings.find(m => m.leadId === leadId);
+  if (existingMeeting) {
+    alert("تم إنشاء اجتماع لهذا العميل مسبقاً.");
+    return;
+  }
+  ensureMeetingDetailsModal();
+  meetingDetailsContext = {
+    mode: "create",
+    leadId: lead.id
+  };
+  const modal = document.getElementById("meetingDetailsModal");
+  const form = document.getElementById("meetingDetailsForm");
+  const info = document.getElementById("meetingDetailsInfo");
+  const title = document.getElementById("meetingDetailsTitle");
+  form.style.display = "block";
+  info.style.display = "none";
+  title.textContent = `تفاصيل الاجتماع - ${lead.company}`;
+  document.getElementById("meetingDateInput").value = "";
+  document.getElementById("meetingTimeInput").value = "";
+  document.getElementById("meetingLinkInput").value = "";
+  document.getElementById("meetingNotesInput").value = "";
+  
+  // إخفاء حقل ملاحظات الاجتماع عند إنشاء اجتماع جديد من صفحة عملائي
+  const notesContainer = document.getElementById("meetingNotesContainer");
+  if (notesContainer) {
+    notesContainer.style.display = "none";
+  }
+  
+  // إخفاء الحقول الإدارية عند إنشاء اجتماع جديد
+  const adminFields = document.getElementById("adminOnlyFields");
+  if (adminFields) {
+    adminFields.style.display = "none";
+  }
+  
+  modal.style.display = "block";
+}
+
+function assignMeeting(id) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (meeting.assignedTo) return alert("تم اختياره مسبقًا");
+  meeting.assignedTo = currentUser.username;
+  meeting.status = "in-progress";
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  loadMeetingsTable();
+}
+
+// توجيه اجتماع إلى موظف محدد بواسطة المدير
+function assignMeetingToUser(id, username) {
+  if (!username) {
+    alert("يرجى اختيار موظف لتوجيه الاجتماع له");
+    return;
+  }
+  if (!(currentUser.role === "manager" || currentUser.role === "admin")) {
+    alert("غير مصرح لك بهذا الإجراء");
+    return;
+  }
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+
+  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const targetUser = users.find(u => u.username === username);
+  if (!targetUser) {
+    alert("يرجى اختيار مستخدم صالح");
+    return;
+  }
+
+  // قواعد السماح بإعادة التوجيه:
+  // - الاجتماعات بحالة new: مسموح توجيهها لمن تنطبق عليه الصلاحيات أدناه
+  // - الاجتماعات بغير حالة new: مسموح للـ admin إعادة توجيهها لأي مستخدم،
+  //   ومسموح للمدير إعادة توجيهها لنفسه أو لأي موظف تحت إدارته
+  if (meeting.status !== "new") {
+    const isAdmin = currentUser.role === "admin";
+    const managerCanAssignToTarget = currentUser.role === "manager" && (targetUser.username === currentUser.username || targetUser.manager === currentUser.username);
+    if (!(isAdmin || managerCanAssignToTarget)) {
+      alert("لا يمكنك إعادة توجيه هذا الاجتماع إلا لنفسك أو لموظف تحت إدارتك.");
+      return;
+    }
+  }
+
+  // تحقق العلاقة في حالة المدير فقط (مع السماح بالتوجيه لنفسه)
+  if (currentUser.role === "manager") {
+    const isSelf = targetUser.username === currentUser.username;
+    if (!isSelf && targetUser.manager !== currentUser.username) {
+      alert("لا يمكنك توجيه الاجتماع إلا لموظف تحت إدارتك أو لنفسك");
+      return;
+    }
+  }
+
+  meeting.assignedTo = username;
+  meeting.status = "in-progress";
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  loadMeetingsTable();
+  alert(`تم توجيه الاجتماع إلى ${username}`);
+
+  // إشعار: توجيه اجتماع لمستخدم محدد (لا ترسل للمرسل إذا كان يوجه لنفسه)
+  if (username !== currentUser.username) {
+    pushNotification("meeting_assigned", `تم توجيه اجتماع إليك: ${meeting.company}`, [username]);
+  }
+}
+function updateMeetingStatus(id, status) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+  
+  // التحقق من حالة القفل
+  if (meeting.locked === true) {
+    const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+    if (!canEditLocked) {
+      alert("تم قفل هذا الاجتماع. لا يمكنك التعديل إلا عن طريق المدير أو رئيس القسم.");
+      return;
+    }
+  }
+  
+  meeting.status = status;
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  
+  // تحديث جدول اجتماعاتي لإظهار/إخفاء خيارات التحويل وزر الحفظ
+  if (document.getElementById("myMeetingsTable")) {
+    loadMyMeetingsTable();
+  }
+  
+  // تحديث الجداول الأخرى
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+}
+
+function editMeetingLink(id, link) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  meeting.meetingLink = link;
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  loadMeetingsTable();
+  loadMyMeetingsTable();
+}
+
+function editMeetingNotes(id) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+  
+  const note = prompt("الملاحظات:", meeting.notes);
+  if (note !== null) {
+    meeting.notes = note;
+    localStorage.setItem("meetings", JSON.stringify(meetings));
+    
+    // تحديث فوري للواجهة
+    const row = document.querySelector(`tr[data-meeting-id="${id}"]`);
+    if (row) {
+      const notesDisplay = row.querySelector('.notes-display');
+      if (notesDisplay) {
+        notesDisplay.textContent = escapeHtml(note.substring(0, 20)) + (note.length > 20 ? "..." : "");
+      }
+    }
+    
+    // تحديث الجداول الأخرى
+    if (document.getElementById("meetingsTable")) {
+      loadMeetingsTable();
+    }
+  }
+}
+
+function updateConversion(id, value) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+  
+  // التحقق من حالة القفل
+  if (meeting.locked === true) {
+    const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+    if (!canEditLocked) {
+      alert("تم قفل هذا الاجتماع. لا يمكنك التعديل إلا عن طريق المدير أو رئيس القسم.");
+      return;
+    }
+  }
+  
+  meeting.conversion = value;
+  if (value === "unfunded") meeting.price = "";
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  
+  // تحديث جدول اجتماعاتي لإظهار/إخفاء زر الحفظ
+  if (document.getElementById("myMeetingsTable")) {
+    loadMyMeetingsTable();
+  }
+  
+  // تحديث الجداول الأخرى
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+}
+
+function updatePrice(id, price) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+  
+  // التحقق من حالة القفل
+  if (meeting.locked === true) {
+    const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+    if (!canEditLocked) {
+      alert("تم قفل هذا الاجتماع. لا يمكنك التعديل إلا عن طريق المدير أو رئيس القسم.");
+      return;
+    }
+  }
+  
+  meeting.price = price;
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  
+  // تحديث فوري - السعر محفوظ في localStorage
+  // لا حاجة لإعادة تحميل الجدول لأن الحقل موجود بالفعل
+  // لكن نحدث الجداول الأخرى إذا كانت موجودة
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+  // تحديث جدول اجتماعاتي لإظهار زر الحفظ إذا كانت الشروط متوفرة
+  if (document.getElementById("myMeetingsTable")) {
+    loadMyMeetingsTable();
+  }
+}
+
+function lockMeeting(id) {
+  if (!confirm("هل أنت متأكد من قفل هذا الاجتماع؟ بعد القفل لن تتمكن من تعديل بيانات الاجتماع إلا عن طريق المدير أو رئيس القسم.")) {
+    return;
+  }
+  
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  if (!meeting) return;
+  
+  // التحقق من الشروط: الحالة يجب أن تكون "تم" والتحويل "ممول" والسعر موجود
+  if (meeting.status !== "done" || meeting.conversion !== "funded" || !meeting.price || meeting.price === "") {
+    alert("لا يمكن قفل الاجتماع إلا إذا كانت الحالة 'تم' والتحويل 'ممول' وتم إدخال السعر.");
+    return;
+  }
+  
+  meeting.locked = true;
+  meeting.lockedAt = new Date().toISOString();
+  meeting.lockedBy = currentUser.username;
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  
+  alert("تم قفل الاجتماع بنجاح. لن تتمكن من تعديل بياناته إلا عن طريق المدير أو رئيس القسم.");
+  
+  // تحديث الجداول
+  if (document.getElementById("myMeetingsTable")) {
+    loadMyMeetingsTable();
+  }
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+}
+
+// إرجاع الاجتماع إلى القائمة العامة
+function returnMeetingToPool(id) {
+  if (!confirm("هل تريد إرجاع هذا الاجتماع إلى القائمة العامة؟ سيتم إزالته من اجتماعاتك.")) {
+    return;
+  }
+  
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === id);
+  
+  if (!meeting) {
+    alert("الاجتماع غير موجود");
+    return;
+  }
+  
+  // التحقق من حالة القفل
+  if (meeting.locked === true) {
+    const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+    if (!canEditLocked) {
+      alert("تم قفل هذا الاجتماع. لا يمكنك إرجاعه إلى القائمة العامة إلا عن طريق المدير أو رئيس القسم.");
+      return;
+    }
+  }
+  
+  // التحقق من الصلاحيات
+  const canReturn = currentUser.role === "admin" || 
+                    currentUser.role === "manager" || 
+                    meeting.assignedTo === currentUser.username;
+  
+  if (!canReturn) {
+    alert("غير مصرح لك بهذا الإجراء");
+    return;
+  }
+  
+  // إرجاع الاجتماع: إزالة التخصيص وتغيير الحالة إلى جديد
+  meeting.assignedTo = null;
+  meeting.status = "new";
+  
+  localStorage.setItem("meetings", JSON.stringify(meetings));
+  
+  alert("تم إرجاع الاجتماع إلى القائمة العامة بنجاح");
+  loadMyMeetingsTable();
+  
+  // إذا كان المستخدم في صفحة جميع الاجتماعات، قم بتحديثها أيضاً
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+}
+
+// صفحة جميع الميتنجز
+async function initMeetingsPage() {
+  await loadCurrentUser();
+  if (!checkPagePermission("meetings.html")) return;
+  ensureMeetingsFiltersUI();
+  loadMeetingsTable();
+  // تحديث مواضع العناصر اللاصقة
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 200);
+}
+
+// صفحة جميع الميتنجز
+function loadMeetingsTable() {
+  let meetings = JSON.parse(localStorage.getItem("meetings") || "[]")
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  const isAdmin = currentUser.role === "admin";
+  const isManager = currentUser.role === "manager";
+  const isSales = currentUser.role === "sales" || currentUser.role === "telesales";
+
+  // إظهار فقط الميتنجز الجديدة (غير مخصصة) للسيلز
+  if (isSales) {
+    meetings = meetings.filter(m => m.status === "new" && !m.assignedTo);
+  }
+
+  const typeFilter = document.getElementById("meetingsTypeFilter")?.value || "";
+  const statusFilter = document.getElementById("meetingsStatusFilter")?.value || "";
+  const conversionFilter = document.getElementById("meetingsConversionFilter")?.value || "";
+  const employeeFilter = document.getElementById("meetingsEmployeeFilter")?.value || "";
+  const dateFromStr = document.getElementById("meetingsDateFrom")?.value || "";
+  const dateToStr = document.getElementById("meetingsDateTo")?.value || "";
+  const searchQuery = (document.getElementById("meetingsSearchInput")?.value || "").trim().toLowerCase();
+  const dateFrom = parseDateInput(dateFromStr);
+  const dateTo = parseDateInput(dateToStr, true);
+
+  meetings = meetings.filter(m => {
+    const typeOk = !typeFilter || m.type === typeFilter;
+    const statusOk = !statusFilter || m.status === statusFilter;
+    const conversionValue = m.conversion || "unfunded";
+    const conversionOk = !conversionFilter || conversionValue === conversionFilter;
+    const meetingDate = (() => {
+      const candidates = [m.scheduledAt, m.createdAt];
+      for (const value of candidates) {
+        if (!value) continue;
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) return d;
+      }
+      return null;
+    })();
+    const dateOk = (!dateFrom || (meetingDate && meetingDate >= dateFrom)) &&
+                   (!dateTo || (meetingDate && meetingDate <= dateTo));
+    let employeeOk = true;
+    if (employeeFilter === "__unassigned") {
+      employeeOk = !m.assignedTo;
+    } else if (employeeFilter) {
+      employeeOk = m.assignedTo === employeeFilter;
+    }
+    const company = (m.company || "").toLowerCase();
+    const phone = (m.phone || "").toLowerCase();
+    const searchOk = !searchQuery || company.includes(searchQuery) || phone.includes(searchQuery);
+    return typeOk && statusOk && conversionOk && employeeOk && dateOk && searchOk;
+  });
+
+  const meetingsCountEl = document.getElementById("meetingsCount");
+  if (meetingsCountEl) {
+    meetingsCountEl.textContent = meetings.length;
+  }
+
+  const tbody = document.querySelector("#meetingsTable tbody");
+  tbody.innerHTML = "";
+
+  // من يمكن التوجيه لهم بحسب الدور
+  let assignableUsers = [];
+  const usersAll = JSON.parse(localStorage.getItem("users") || "[]");
+  if (isManager) {
+    // موظفو المدير + المدير نفسه
+    assignableUsers = usersAll.filter(u => u.manager === currentUser.username && u.username !== "admin");
+    const selfUser = usersAll.find(u => u.username === currentUser.username);
+    if (selfUser) {
+      const exists = assignableUsers.some(u => u.username === selfUser.username);
+      if (!exists) assignableUsers.push(selfUser);
+    }
+  } else if (isAdmin) {
+    // الأدمن يمكنه اختيار أي مستخدم بمن فيهم admin نفسه
+    assignableUsers = usersAll.slice();
+  }
+
+  meetings.forEach((m, i) => {
+    const canAssign = m.status === "new" && !m.assignedTo;
+    const scheduledText = m.scheduledAt ? formatDateTime(m.scheduledAt) : "لم يتم تحديده";
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${escapeHtml(m.company)}</td>
+      <td>${m.phone ? formatPhoneWithIcons(m.phone) : "-"}</td>
+      <td>${m.type === "hunt meetings" ? "Hunt" : (m.type === "hot meetings" ? "Hot" : "Cold")}</td>
+      <td>${scheduledText}</td>
+      <td>
+        <span class="status ${m.status}">${getStatusText(m.status)}</span>
+        ${(isManager || isAdmin) ? `
+          <select onchange="updateMeetingStatus('${m.id}', this.value)" style="margin-top:0.35rem; width:100%;">
+            <option value="in-progress" ${m.status === 'in-progress' ? 'selected' : ''}>تحت التنفيذ</option>
+            <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل</option>
+            <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم</option>
+          </select>
+        ` : ""}
+      </td>
+      <td>${m.assignedTo || "-"}</td>
+      <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px;">
+        ${m.telesalesNotes ? escapeHtml(m.telesalesNotes.substring(0, 100)) + (m.telesalesNotes.length > 100 ? "..." : "") : "لا توجد ملاحظات"}
+      </td>
+      <td class="notes-cell">${escapeHtml(m.notes.substring(0, 20))}${m.notes.length > 20 ? "..." : ""}</td>
+      <td>
+        ${(() => {
+          const buttons = [];
+          buttons.push({html: `<button onclick="viewMeetingDetails('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
+          if (isManager || isAdmin) {
+            buttons.push({html: `<button onclick="openMeetingDetailsForEdit('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تعديل الاجتماع</button>`});
+          }
+          if (canAssign) {
+            buttons.push({html: `<button onclick="assignMeeting('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">أنا سأتابع</button>`});
+          }
+          if (isManager || isAdmin) {
+            buttons.push({html: `
+              <div style="padding:0.5rem; border-bottom:1px solid #f0f0f0;">
+                <select id="assignTo_${m.id}" style="width:100%; padding:0.4rem; margin-bottom:0.5rem; border:1px solid #ddd; border-radius:4px;">
+                  <option value="">— اختر موظف —</option>
+                  ${assignableUsers.map(u => `<option value="${u.username}">${u.username} (${getRoleText(u.role)})</option>`).join('')}
+                </select>
+                <button onclick="assignMeetingToUser('${m.id}', document.getElementById('assignTo_${m.id}').value); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));" style="width:100%; padding:0.5rem; background:#2E3192; color:#fff; border:none; border-radius:4px; cursor:pointer;">توجيه</button>
+              </div>
+            `});
+          }
+          return createActionsMenu(buttons, typeof lead !== 'undefined' ? lead.id : (typeof m !== 'undefined' ? m.id : Date.now()));
+        })()}
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// صفحة ميتنجزي
+async function initMyMeetings() {
+  await loadCurrentUser();
+  if (!checkPagePermission("my-meetings.html")) return;
+  ensureMyMeetingsFiltersUI();
+  loadMyMeetingsTable();
+  // تحديث مواضع العناصر اللاصقة
+  setTimeout(() => {
+    updateStickyPositions();
+  }, 200);
+}
+
+function loadMyMeetingsTable() {
+  let meetings = JSON.parse(localStorage.getItem("meetings") || "[]")
+    .filter(m => m.assignedTo === currentUser.username)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  const typeFilter = document.getElementById("myMeetingsTypeFilter")?.value || "";
+  const statusFilter = document.getElementById("myMeetingsStatusFilter")?.value || "";
+  const conversionFilter = document.getElementById("myMeetingsConversionFilter")?.value || "";
+  const dateFromStr = document.getElementById("myMeetingsDateFrom")?.value || "";
+  const dateToStr = document.getElementById("myMeetingsDateTo")?.value || "";
+  const searchQuery = (document.getElementById("myMeetingsSearchInput")?.value || "").trim().toLowerCase();
+  const dateFrom = parseDateInput(dateFromStr);
+  const dateTo = parseDateInput(dateToStr, true);
+
+  meetings = meetings.filter(m => {
+    const typeOk = !typeFilter || m.type === typeFilter;
+    const statusOk = !statusFilter || m.status === statusFilter;
+    const conversionValue = m.conversion || "unfunded";
+    const conversionOk = !conversionFilter || conversionValue === conversionFilter;
+    const meetingDate = (() => {
+      const candidates = [m.scheduledAt, m.createdAt];
+      for (const value of candidates) {
+        if (!value) continue;
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) return d;
+      }
+      return null;
+    })();
+    const dateOk = (!dateFrom || (meetingDate && meetingDate >= dateFrom)) &&
+                   (!dateTo || (meetingDate && meetingDate <= dateTo));
+    const company = (m.company || "").toLowerCase();
+    const phone = (m.phone || "").toLowerCase();
+    const searchOk = !searchQuery || company.includes(searchQuery) || phone.includes(searchQuery);
+    return typeOk && statusOk && conversionOk && dateOk && searchOk;
+  });
+
+  const myMeetingCountEl = document.getElementById("myMeetingCount");
+  if (myMeetingCountEl) {
+    myMeetingCountEl.textContent = meetings.length;
+  }
+  const tbody = document.querySelector("#myMeetingsTable tbody");
+  tbody.innerHTML = "";
+  
+  // التحقق من الصلاحيات لإرجاع الاجتماع
+  const canReturn = currentUser.role === "admin" || currentUser.role === "manager";
+  
+  meetings.forEach((m, i) => {
+    const isOwner = m.assignedTo === currentUser.username;
+    const canReturnMeeting = canReturn || isOwner;
+    const isLocked = m.locked === true;
+    const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+    const canEditConversion = m.status === "done" && (!isLocked || canEditLocked);
+    const showSaveButton = m.status === "done" && m.conversion === "funded" && m.price && m.price !== "" && !isLocked;
+    
+    const row = document.createElement("tr");
+    row.setAttribute("data-meeting-id", m.id);
+    const scheduledText = m.scheduledAt ? formatDateTime(m.scheduledAt) : "لم يتم تحديده";
+    row.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${escapeHtml(m.company)}</td>
+      <td>${m.phone ? formatPhoneWithIcons(m.phone) : "-"}</td>
+      <td>${m.type === "cold meetings" ? "Cold" : (m.type === "hot meetings" ? "Hot" : "Hunt")}</td>
+      <td>${scheduledText}</td>
+      <td>
+        <span class="status ${m.status}" data-status="${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' ? 'تحت التنفيذ' : getStatusText(m.status)))}</span>
+        <select onchange="updateMeetingStatus('${m.id}', this.value)" ${isLocked && !canEditLocked ? 'disabled' : ''} style="margin-top:0.35rem; width:100%;">
+          <option value="in-progress" ${m.status === 'in-progress' ? 'selected' : ''}>تحت التنفيذ</option>
+          <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل دخول الاجتماع</option>
+          <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم دخول الاجتماع</option>
+        </select>
+        ${isLocked && !canEditLocked ? `<small style="display:block; margin-top:0.35rem; color:#e74c3c;">تم قفل الاجتماع - التعديل متاح فقط للمدير أو رئيس القسم</small>` : ""}
+      </td>
+      <td class="conversion-cell">
+        <select onchange="updateConversion('${m.id}', this.value)" ${canEditConversion ? '' : 'disabled'}>
+          <option value="unfunded" ${m.conversion === 'unfunded' ? 'selected' : ''}>لم يتم التعاقد</option>
+          <option value="funded" ${m.conversion === 'funded' ? 'selected' : ''}>تم التعاقد</option>
+        </select>
+        ${m.conversion === 'funded' ? (isLocked && !canEditLocked ? `<div style="margin-top:0.5rem; padding:0.5rem; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; color:#495057;"><strong>السعر:</strong> ${m.price || 'غير محدد'}</div>` : `<input type="number" value="${m.price || ''}" onchange="updatePrice('${m.id}', this.value)" placeholder="السعر" class="price-input" ${canEditConversion ? '' : 'disabled'} />`) : ""}
+        ${showSaveButton ? `<button onclick="lockMeeting('${m.id}')" class="small" style="background:#27ae60; color:#fff; margin-top:0.5rem; width:100%;">حفظ</button>` : ""}
+        ${canEditConversion ? '' : `<small style="display:block; margin-top:0.35rem; color:#7f8c8d;">التعديل متاح اذا كانت حاله الاجتماع"تم"</small>`}
+        ${isLocked && !canEditLocked ? `<small style="display:block; margin-top:0.35rem; color:#e74c3c;">تم حفظ السعر - لا يمكن التعديل</small>` : ""}
+      </td>
+      <td>
+        ${(() => {
+          const buttons = [];
+          buttons.push({html: `<button onclick="${isLocked && !canEditLocked ? 'viewMeetingDetailsLocked' : 'openMeetingDetailsForMyMeeting'}('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
+          if (m.status === 'failed') {
+            buttons.push({html: `<button onclick="registerNewMeetingFromFailed('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تسجيل اجتماع جديد</button>`});
+          }
+          if (canReturnMeeting && (!isLocked || canEditLocked)) {
+            buttons.push({html: `<button onclick="returnMeetingToPool('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">إرجاع للقائمة العامة</button>`});
+          }
+          return createActionsMenu(buttons, m.id);
+        })()}
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+let meetingDetailsContext = null;
+
+function ensureMeetingDetailsModal() {
+  if (document.getElementById("meetingDetailsModal")) return;
+  const modal = document.createElement("div");
+  modal.id = "meetingDetailsModal";
+  modal.className = "modal";
+  modal.style.display = "none";
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:520px;">
+      <span class="close" onclick="closeMeetingDetailsModal()">×</span>
+      <h2 id="meetingDetailsTitle" style="margin-bottom:1rem;">تفاصيل الاجتماع</h2>
+      <div id="meetingDetailsForm">
+        <label style="display:block; margin-bottom:0.35rem;">تاريخ الاجتماع</label>
+        <input type="date" id="meetingDateInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+        <label style="display:block; margin-bottom:0.35rem;">وقت الاجتماع</label>
+        <input type="time" id="meetingTimeInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+        <label style="display:block; margin-bottom:0.35rem;">رابط الاجتماع</label>
+        <input type="url" id="meetingLinkInput" placeholder="https://example.com" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+        <div id="adminOnlyFields" style="display:none;">
+          <label style="display:block; margin-bottom:0.35rem;">دخول الاجتماع</label>
+          <select id="meetingStatusInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+            <option value="in-progress">تحت التنفيذ</option>
+            <option value="failed">فشل دخول الاجتماع</option>
+            <option value="done">تم دخول الاجتماع</option>
+          </select>
+          <label style="display:block; margin-bottom:0.35rem;">التعاقد</label>
+          <select id="meetingConversionInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+            <option value="unfunded">لم يتم التعاقد</option>
+            <option value="funded">تم التعاقد</option>
+          </select>
+          <div id="priceFieldContainer" style="display:none;">
+            <label style="display:block; margin-bottom:0.35rem;">سعر التمويل</label>
+            <input type="number" id="meetingPriceInput" placeholder="أدخل السعر" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+          </div>
+        </div>
+        <div id="meetingNotesContainer">
+          <label style="display:block; margin-bottom:0.35rem;">ملاحظات الاجتماع (اختياري)</label>
+          <textarea id="meetingNotesInput" rows="3" style="width:100%; padding:0.5rem; margin-bottom:1rem; border-radius:6px; border:1px solid #ccc;"></textarea>
+        </div>
+        <div style="display:flex; gap:0.75rem;">
+          <button id="saveMeetingDetailsBtn" onclick="saveMeetingDetails()" style="background:#27ae60; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; cursor:pointer;">حفظ</button>
+          <button type="button" onclick="closeMeetingDetailsModal()" style="background:#95a5a6; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; cursor:pointer;">إلغاء</button>
+        </div>
+      </div>
+      <div id="meetingDetailsInfo" style="display:none; line-height:1.6; color:#333;"></div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function openMeetingDetailsForLead(leadId) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.leadId === leadId);
+  if (!meeting) {
+    alert("لم يتم إنشاء اجتماع لهذا العميل بعد. يرجى تحويل العميل إلى اجتماع أولاً.");
+    return;
+  }
+  viewMeetingDetails(meeting.id);
+}
+
+function viewMeetingDetails(meetingId, hidePrice = false) {
+  ensureMeetingDetailsModal();
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) return;
+  meetingDetailsContext = { meetingId: meeting.id, mode: "view" };
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === meeting.leadId);
+  const modal = document.getElementById("meetingDetailsModal");
+  const form = document.getElementById("meetingDetailsForm");
+  const info = document.getElementById("meetingDetailsInfo");
+  const title = document.getElementById("meetingDetailsTitle");
+  form.style.display = "none";
+  info.style.display = "block";
+  title.textContent = `تفاصيل الاجتماع - ${meeting.company}`;
+  const scheduledText = meeting.scheduledAt ? formatDateTime(meeting.scheduledAt) : "لم يتم تحديده";
+  const linkHtml = meeting.meetingLink ? `<a href="${meeting.meetingLink}" target="_blank">${meeting.meetingLink}</a>` : "لا يوجد";
+  const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
+  // استخدام "التعاقد" و "تم التعاقد" / "لم يتم التعاقد" في جميع الصفحات
+  const conversionLabel = "التعاقد";
+  const conversionText = meeting.conversion === "funded" ? "تم التعاقد" : "لم يتم التعاقد";
+  const priceText = meeting.conversion === "funded" && meeting.price ? meeting.price : "غير محدد";
+  const statusText = meeting.status === 'done' ? 'تم دخول الاجتماع' : (meeting.status === 'failed' ? 'فشل دخول الاجتماع' : (meeting.status === 'in-progress' ? 'تحت التنفيذ' : getStatusText(meeting.status)));
+  const lockedText = meeting.locked ? " (مقفول)" : "";
+  
+  info.innerHTML = `
+    <p><strong>الشركة:</strong> ${escapeHtml(meeting.company)}</p>
+    <p><strong>تاريخ ووقت الاجتماع:</strong> ${scheduledText}</p>
+    <p><strong>رابط الاجتماع:</strong> ${linkHtml}</p>
+    <p><strong>رابط المتجر:</strong> ${storeLinkHtml}</p>
+    <p><strong>دخول الاجتماع:</strong> ${statusText}${lockedText}</p>
+    <p><strong>${conversionLabel}:</strong> ${conversionText}</p>
+    ${!hidePrice && meeting.conversion === "funded" ? `<p><strong>سعر التمويل:</strong> ${priceText}</p>` : ""}
+    <p><strong>ملاحظات التلي سيلز:</strong> ${meeting.telesalesNotes ? escapeHtml(meeting.telesalesNotes) : "لا توجد"}</p>
+    <p><strong>ملاحظات الاجتماع:</strong> ${meeting.notes ? escapeHtml(meeting.notes) : "لا توجد"}</p>
+    <p><strong>تم التحويل بواسطة:</strong> ${meeting.createdBy || "-"}</p>
+    <p><strong>الموظف المتابع:</strong> ${meeting.assignedTo || "-"}</p>
+    ${meeting.locked && meeting.lockedAt ? `<p><strong>تم القفل في:</strong> ${formatDateTime(meeting.lockedAt)}</p>` : ""}
+    ${meeting.locked && meeting.lockedBy ? `<p><strong>تم القفل بواسطة:</strong> ${meeting.lockedBy}</p>` : ""}
+    <div style="margin-top:1rem; text-align:center;">
+      <button type="button" onclick="closeMeetingDetailsModal()" style="background:#2E3192; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; cursor:pointer;">إغلاق</button>
+    </div>
+  `;
+  modal.style.display = "block";
+}
+
+function viewMeetingDetailsLocked(meetingId) {
+  // عرض تفاصيل الاجتماع المقفول بدون إمكانية التعديل
+  ensureMeetingDetailsModal();
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) {
+    alert("الاجتماع غير موجود.");
+    return;
+  }
+  viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
+}
+
+function openMeetingDetailsForEdit(meetingId) {
+  // فتح نموذج التعديل للمدير ورئيس القسم - يمكنهم التعديل حتى لو كان الاجتماع مقفولاً
+  ensureMeetingDetailsModal();
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) {
+    alert("الاجتماع غير موجود.");
+    return;
+  }
+  
+  // التحقق من الصلاحيات
+  const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+  if (!canEditLocked) {
+    alert("غير مصرح لك بهذا الإجراء. هذا الزر متاح فقط للمدير ورئيس القسم.");
+    return;
+  }
+  
+  meetingDetailsContext = { meetingId: meeting.id, mode: "edit" };
+  const modal = document.getElementById("meetingDetailsModal");
+  const form = document.getElementById("meetingDetailsForm");
+  const info = document.getElementById("meetingDetailsInfo");
+  const title = document.getElementById("meetingDetailsTitle");
+  form.style.display = "block";
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === meeting.leadId);
+  const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
+  
+  const isLocked = meeting.locked === true;
+  
+  info.innerHTML = `
+    <div style="background:#f8f9fd; padding:0.75rem; border-radius:6px; margin-top:1rem; line-height:1.6;">
+      <p style="margin:0 0 0.4rem;"><strong>رابط المتجر:</strong> ${storeLinkHtml}</p>
+      <p style="margin:0 0 0.4rem;"><strong>ملاحظات التلي سيلز:</strong> ${meeting.telesalesNotes ? escapeHtml(meeting.telesalesNotes) : "لا توجد"}</p>
+      <p style="margin:0;"><strong>تم التحويل بواسطة:</strong> ${meeting.createdBy || "-"}</p>
+      ${isLocked ? `<p style="margin:0.4rem 0 0; color:#e67e22;"><strong>⚠️ هذا الاجتماع مقفول - أنت كمدير/رئيس قسم يمكنك التعديل عليه</strong></p>` : ""}
+    </div>
+  `;
+  info.style.display = "block";
+  title.textContent = `تعديل الاجتماع - ${meeting.company}${isLocked ? " (مقفول)" : ""}`;
+  
+  // ملء الحقول الأساسية
+  document.getElementById("meetingDateInput").value = meeting.scheduledAt ? new Date(meeting.scheduledAt).toISOString().slice(0,10) : "";
+  document.getElementById("meetingTimeInput").value = meeting.scheduledAt ? new Date(meeting.scheduledAt).toISOString().slice(11,16) : "";
+  document.getElementById("meetingLinkInput").value = meeting.meetingLink || "";
+  document.getElementById("meetingNotesInput").value = meeting.notes || "";
+  
+  // إظهار الحقول الإدارية وملؤها
+  const adminFields = document.getElementById("adminOnlyFields");
+  if (adminFields) {
+    adminFields.style.display = "block";
+    document.getElementById("meetingStatusInput").value = meeting.status || "in-progress";
+    document.getElementById("meetingConversionInput").value = meeting.conversion || "unfunded";
+    
+    // إظهار/إخفاء حقل السعر بناءً على التحويل
+    const priceContainer = document.getElementById("priceFieldContainer");
+    const priceInput = document.getElementById("meetingPriceInput");
+    if (meeting.conversion === "funded") {
+      priceContainer.style.display = "block";
+      priceInput.value = meeting.price || "";
+    } else {
+      priceContainer.style.display = "none";
+      priceInput.value = "";
+    }
+    
+    // إضافة event listener لتغيير التحويل
+    document.getElementById("meetingConversionInput").onchange = function() {
+      if (this.value === "funded") {
+        priceContainer.style.display = "block";
+      } else {
+        priceContainer.style.display = "none";
+        priceInput.value = "";
+      }
+    };
+  }
+  
+  // إظهار حقل ملاحظات الاجتماع للمدير ورئيس القسم
+  const notesContainer = document.getElementById("meetingNotesContainer");
+  if (notesContainer) {
+    notesContainer.style.display = "block";
+  }
+  
+  // تفعيل جميع الحقول للمدير ورئيس القسم
+  document.getElementById("meetingDateInput").disabled = false;
+  document.getElementById("meetingTimeInput").disabled = false;
+  document.getElementById("meetingLinkInput").disabled = false;
+  document.getElementById("meetingNotesInput").disabled = false;
+  document.getElementById("saveMeetingDetailsBtn").disabled = false;
+  if (adminFields) {
+    document.getElementById("meetingStatusInput").disabled = false;
+    document.getElementById("meetingConversionInput").disabled = false;
+    document.getElementById("meetingPriceInput").disabled = false;
+  }
+  document.getElementById("saveMeetingDetailsBtn").style.opacity = "1";
+  document.getElementById("saveMeetingDetailsBtn").style.cursor = "pointer";
+  document.getElementById("meetingDateInput").style.pointerEvents = "auto";
+  document.getElementById("meetingTimeInput").style.pointerEvents = "auto";
+  document.getElementById("meetingLinkInput").style.pointerEvents = "auto";
+  document.getElementById("meetingNotesInput").style.pointerEvents = "auto";
+  document.getElementById("saveMeetingDetailsBtn").style.pointerEvents = "auto";
+  
+  modal.style.display = "block";
+}
+
+function openMeetingDetailsForMyMeeting(meetingId) {
+  ensureMeetingDetailsModal();
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) {
+    alert("الاجتماع غير موجود.");
+    return;
+  }
+  
+  // التحقق من حالة القفل
+  const isLocked = meeting.locked === true;
+  const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+  if (isLocked && !canEditLocked) {
+    alert("تم قفل هذا الاجتماع. لا يمكنك التعديل عليه إلا عن طريق المدير أو رئيس القسم.");
+    viewMeetingDetails(meetingId, true); // إخفاء سعر التمويل في صفحة عملائي
+    return;
+  }
+  
+  meetingDetailsContext = { meetingId: meeting.id, mode: "edit" };
+  const modal = document.getElementById("meetingDetailsModal");
+  const form = document.getElementById("meetingDetailsForm");
+  const info = document.getElementById("meetingDetailsInfo");
+  const title = document.getElementById("meetingDetailsTitle");
+  form.style.display = "block";
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === meeting.leadId);
+  const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
+  
+  const canEdit = !isLocked || canEditLocked;
+  
+  info.innerHTML = `
+    <div style="background:#f8f9fd; padding:0.75rem; border-radius:6px; margin-top:1rem; line-height:1.6;">
+      <p style="margin:0 0 0.4rem;"><strong>رابط المتجر:</strong> ${storeLinkHtml}</p>
+      <p style="margin:0 0 0.4rem;"><strong>ملاحظات التلي سيلز:</strong> ${meeting.telesalesNotes ? escapeHtml(meeting.telesalesNotes) : "لا توجد"}</p>
+      <p style="margin:0;"><strong>تم التحويل بواسطة:</strong> ${meeting.createdBy || "-"}</p>
+      ${isLocked && !canEditLocked ? `<p style="margin:0.4rem 0 0; color:#e74c3c;"><strong>تم قفل الاجتماع - التعديل متاح فقط للمدير أو رئيس القسم</strong></p>` : ""}
+    </div>
+  `;
+  info.style.display = "block";
+  title.textContent = `تفاصيل الاجتماع - ${meeting.company}`;
+  document.getElementById("meetingDateInput").value = meeting.scheduledAt ? new Date(meeting.scheduledAt).toISOString().slice(0,10) : "";
+  document.getElementById("meetingTimeInput").value = meeting.scheduledAt ? new Date(meeting.scheduledAt).toISOString().slice(11,16) : "";
+  document.getElementById("meetingLinkInput").value = meeting.meetingLink || "";
+  document.getElementById("meetingNotesInput").value = meeting.notes || "";
+  
+  // إخفاء الحقول الإدارية للمستخدمين العاديين
+  const adminFields = document.getElementById("adminOnlyFields");
+  if (adminFields) {
+    adminFields.style.display = "none";
+  }
+  
+  // إظهار حقل ملاحظات الاجتماع في وضع التعديل
+  const notesContainer = document.getElementById("meetingNotesContainer");
+  if (notesContainer) {
+    notesContainer.style.display = "block";
+  }
+  
+  // تعطيل الحقول إذا كان الاجتماع مقفولاً
+  document.getElementById("meetingDateInput").disabled = !canEdit;
+  document.getElementById("meetingTimeInput").disabled = !canEdit;
+  document.getElementById("meetingLinkInput").disabled = !canEdit;
+  document.getElementById("meetingNotesInput").disabled = !canEdit;
+  document.getElementById("saveMeetingDetailsBtn").disabled = !canEdit;
+  if (!canEdit) {
+    document.getElementById("saveMeetingDetailsBtn").style.opacity = "0.6";
+    document.getElementById("saveMeetingDetailsBtn").style.cursor = "not-allowed";
+    // إضافة style pointer-events لمنع النقر
+    document.getElementById("meetingDateInput").style.pointerEvents = "none";
+    document.getElementById("meetingTimeInput").style.pointerEvents = "none";
+    document.getElementById("meetingLinkInput").style.pointerEvents = "none";
+    document.getElementById("meetingNotesInput").style.pointerEvents = "none";
+    document.getElementById("saveMeetingDetailsBtn").style.pointerEvents = "none";
+  } else {
+    document.getElementById("saveMeetingDetailsBtn").style.opacity = "1";
+    document.getElementById("saveMeetingDetailsBtn").style.cursor = "pointer";
+    // إزالة pointer-events
+    document.getElementById("meetingDateInput").style.pointerEvents = "auto";
+    document.getElementById("meetingTimeInput").style.pointerEvents = "auto";
+    document.getElementById("meetingLinkInput").style.pointerEvents = "auto";
+    document.getElementById("meetingNotesInput").style.pointerEvents = "auto";
+    document.getElementById("saveMeetingDetailsBtn").style.pointerEvents = "auto";
+  }
+  
+  modal.style.display = "block";
+}
+
+function saveMeetingDetails() {
+  if (!meetingDetailsContext) return;
+  const dateVal = document.getElementById("meetingDateInput").value;
+  const timeVal = document.getElementById("meetingTimeInput").value;
+  const linkVal = document.getElementById("meetingLinkInput").value.trim();
+  // الحصول على ملاحظات الاجتماع فقط إذا كان الحقل مرئياً
+  const notesContainer = document.getElementById("meetingNotesContainer");
+  const notesVal = (notesContainer && notesContainer.style.display !== "none") 
+    ? document.getElementById("meetingNotesInput").value.trim() 
+    : "";
+
+  if (!dateVal || !timeVal) {
+    alert("يرجى تحديد تاريخ ووقت الاجتماع.");
+    return;
+  }
+  if (!linkVal) {
+    alert("يرجى إدخال رابط الاجتماع.");
+    return;
+  }
+
+  const scheduledIso = new Date(`${dateVal}T${timeVal}`).toISOString();
+
+  if (meetingDetailsContext.mode === "edit") {
+    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const meeting = meetings.find(m => m.id === meetingDetailsContext.meetingId);
+    if (!meeting) return;
+    
+    // التحقق من حالة القفل
+    if (meeting.locked === true) {
+      const canEditLocked = (currentUser.role === "admin" || currentUser.role === "manager");
+      if (!canEditLocked) {
+        alert("تم قفل هذا الاجتماع. لا يمكنك التعديل إلا عن طريق المدير أو رئيس القسم.");
+        closeMeetingDetailsModal();
+        return;
+      }
+    }
+    
+    meeting.scheduledAt = scheduledIso;
+    meeting.meetingLink = linkVal;
+    meeting.notes = notesVal;
+    
+    // حفظ الحقول الإدارية إذا كانت موجودة (للمدير ورئيس القسم)
+    const adminFields = document.getElementById("adminOnlyFields");
+    if (adminFields && adminFields.style.display !== "none") {
+      const statusInput = document.getElementById("meetingStatusInput");
+      const conversionInput = document.getElementById("meetingConversionInput");
+      const priceInput = document.getElementById("meetingPriceInput");
+      
+      if (statusInput) {
+        meeting.status = statusInput.value;
+      }
+      if (conversionInput) {
+        meeting.conversion = conversionInput.value;
+        if (conversionInput.value === "funded" && priceInput) {
+          meeting.price = priceInput.value || "";
+        } else {
+          meeting.price = "";
+        }
+      }
+    }
+    
+    meeting.updatedAt = new Date().toISOString();
+    localStorage.setItem("meetings", JSON.stringify(meetings));
+    alert("تم تحديث تفاصيل الاجتماع بنجاح.");
+    closeMeetingDetailsModal();
+    if (document.getElementById("meetingsTable")) {
+      loadMeetingsTable();
+    }
+    if (document.getElementById("myMeetingsTable")) {
+      loadMyMeetingsTable();
+    }
+    if (document.getElementById("myLeadsTable")) {
+      loadMyLeadsTable();
+    }
+  } else if (meetingDetailsContext.mode === "create") {
+    const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const lead = leads.find(l => l.id === meetingDetailsContext.leadId);
+    if (!lead) {
+      alert("تعذر العثور على العميل.");
+      return;
+    }
+    const existingMeeting = meetings.find(m => m.leadId === lead.id);
+    if (existingMeeting) {
+      alert("تم إنشاء اجتماع لهذا العميل مسبقاً.");
+      closeMeetingDetailsModal();
+      return;
+    }
+    // توزيع الاجتماع تلقائياً على موظفي السيلز بالتساوي
+    const assignedTo = assignMeetingToSalesEqually(meetings);
+    
+    const newMeeting = {
+      id: Date.now().toString(),
+      leadId: lead.id,
+      company: lead.company,
+      phone: lead.phone,
+      type: lead.type === "cold" ? "cold meetings" : (lead.type === "hot" ? "hot meetings" : "hunt meetings"),
+      status: assignedTo ? "in-progress" : "new",
+      assignedTo: assignedTo,
+      createdAt: new Date().toISOString(),
+      scheduledAt: scheduledIso,
+      meetingLink: linkVal,
+      notes: notesVal,
+      telesalesNotes: lead.notes || "",
+      conversion: "unfunded",
+      price: "",
+      createdBy: currentUser.username
+    };
+    meetings.push(newMeeting);
+    localStorage.setItem("meetings", JSON.stringify(meetings));
+    lead.convertedToMeeting = true;
+    lead.updatedAt = new Date().toISOString();
+    localStorage.setItem("leads", JSON.stringify(leads));
+    
+    // إرسال إشعار للموظف إذا تم التوزيع التلقائي
+    if (assignedTo) {
+      pushNotification("meeting_assigned", `تم توجيه اجتماع إليك تلقائياً: ${lead.company}`, [assignedTo]);
+    }
+    
+    alert(assignedTo ? `تم إنشاء الاجتماع وتحويل العميل بنجاح. تم توجيه الاجتماع تلقائياً إلى ${assignedTo}.` : "تم إنشاء الاجتماع وتحويل العميل بنجاح.");
+    closeMeetingDetailsModal();
+    if (document.getElementById("meetingsTable")) {
+      loadMeetingsTable();
+    }
+    if (document.getElementById("myMeetingsTable")) {
+      loadMyMeetingsTable();
+    }
+    if (document.getElementById("leadsTable")) {
+      loadLeadsTable();
+    }
+    if (document.getElementById("myLeadsTable")) {
+      loadMyLeadsTable();
+    }
+  } else if (meetingDetailsContext.mode === "createFromFailed") {
+    const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+    const failedMeeting = meetings.find(m => m.id === meetingDetailsContext.failedMeetingId);
+    if (!failedMeeting) {
+      alert("تعذر العثور على الاجتماع الأصلي.");
+      return;
+    }
+    
+    // التحقق من أن الاجتماع فاشل
+    if (failedMeeting.status !== "failed") {
+      alert("يمكن تسجيل اجتماع جديد فقط للاجتماعات الفاشلة.");
+      closeMeetingDetailsModal();
+      return;
+    }
+    
+    // إنشاء اجتماع جديد بنفس البيانات
+    const newMeeting = {
+      id: Date.now().toString(),
+      leadId: failedMeeting.leadId,
+      company: failedMeeting.company,
+      phone: failedMeeting.phone,
+      type: failedMeeting.type,
+      status: "in-progress", // تلقائياً تحت التنفيذ لأنه مخصص للموظف
+      assignedTo: failedMeeting.assignedTo, // نفس الموظف
+      createdAt: new Date().toISOString(),
+      scheduledAt: scheduledIso,
+      meetingLink: linkVal,
+      notes: notesVal,
+      telesalesNotes: failedMeeting.telesalesNotes || "",
+      conversion: "unfunded",
+      price: "",
+      createdBy: currentUser.username
+    };
+    
+    meetings.push(newMeeting);
+    localStorage.setItem("meetings", JSON.stringify(meetings));
+    
+    alert("تم تسجيل الاجتماع الجديد بنجاح.");
+    closeMeetingDetailsModal();
+    if (document.getElementById("meetingsTable")) {
+      loadMeetingsTable();
+    }
+    if (document.getElementById("myMeetingsTable")) {
+      loadMyMeetingsTable();
+    }
+  }
+}
+
+function registerNewMeetingFromFailed(meetingId) {
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  const failedMeeting = meetings.find(m => m.id === meetingId);
+  if (!failedMeeting) {
+    alert("الاجتماع غير موجود.");
+    return;
+  }
+  
+  // التحقق من أن الاجتماع فاشل
+  if (failedMeeting.status !== "failed") {
+    alert("يمكن تسجيل اجتماع جديد فقط للاجتماعات الفاشلة.");
+    return;
+  }
+  
+  // التحقق من أن الاجتماع مخصص للمستخدم الحالي
+  if (failedMeeting.assignedTo !== currentUser.username) {
+    alert("غير مصرح لك بهذا الإجراء.");
+    return;
+  }
+  
+  ensureMeetingDetailsModal();
+  meetingDetailsContext = {
+    mode: "createFromFailed",
+    failedMeetingId: failedMeeting.id
+  };
+  const modal = document.getElementById("meetingDetailsModal");
+  const form = document.getElementById("meetingDetailsForm");
+  const info = document.getElementById("meetingDetailsInfo");
+  const title = document.getElementById("meetingDetailsTitle");
+  form.style.display = "block";
+  info.style.display = "block";
+  title.textContent = `تسجيل اجتماع جديد - ${failedMeeting.company}`;
+  
+  // عرض معلومات الاجتماع الأصلي
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const lead = leads.find(l => l.id === failedMeeting.leadId);
+  const storeLinkHtml = lead && lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">${lead.storeLink}</a>` : "لا يوجد";
+  
+  info.innerHTML = `
+    <div style="background:#f8f9fd; padding:0.75rem; border-radius:6px; margin-bottom:1rem; line-height:1.6;">
+      <p style="margin:0 0 0.4rem;"><strong>الشركة:</strong> ${escapeHtml(failedMeeting.company)}</p>
+      <p style="margin:0 0 0.4rem;"><strong>رقم الهاتف:</strong> ${failedMeeting.phone || "-"}</p>
+      <p style="margin:0 0 0.4rem;"><strong>رابط المتجر:</strong> ${storeLinkHtml}</p>
+      <p style="margin:0;"><strong>ملاحظات التلي سيلز:</strong> ${failedMeeting.telesalesNotes ? escapeHtml(failedMeeting.telesalesNotes) : "لا توجد"}</p>
+    </div>
+    <p style="color:#e67e22; font-weight:bold; margin-bottom:0.5rem;">يرجى إدخال تفاصيل الاجتماع الجديد:</p>
+  `;
+  
+  // مسح الحقول
+  document.getElementById("meetingDateInput").value = "";
+  document.getElementById("meetingTimeInput").value = "";
+  document.getElementById("meetingLinkInput").value = "";
+  document.getElementById("meetingNotesInput").value = "";
+  
+  // إخفاء الحقول الإدارية
+  const adminFields = document.getElementById("adminOnlyFields");
+  if (adminFields) {
+    adminFields.style.display = "none";
+  }
+  
+  // إخفاء حقل ملاحظات الاجتماع
+  const notesContainer = document.getElementById("meetingNotesContainer");
+  if (notesContainer) {
+    notesContainer.style.display = "none";
+  }
+  
+  modal.style.display = "block";
+}
+
+function closeMeetingDetailsModal() {
+  const modal = document.getElementById("meetingDetailsModal");
+  if (modal) {
+    modal.style.display = "none";
+  }
+  meetingDetailsContext = null;
+}
+
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('ar-EG', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+// دوال النسخ والواتساب
+function copyPhoneNumber(phone) {
+  navigator.clipboard.writeText(phone).then(() => {
+    alert(`تم نسخ الرقم: ${phone}`);
+  }).catch(err => {
+    // طريقة بديلة للنسخ
+    const textArea = document.createElement("textarea");
+    textArea.value = phone;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    alert(`تم نسخ الرقم: ${phone}`);
+  });
+}
+
+function openWhatsApp(phone) {
+  // تنظيف الرقم من أي رموز غير ضرورية
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  // فتح الواتساب في تبويب جديد
+  window.open(`https://wa.me/${cleanPhone}`, '_blank');
+}
+
+function formatPhoneWithIcons(phone) {
+  if (!phone) return "-";
+  // تنظيف الرقم من أي رموز خاصة في onclick
+  const cleanPhoneForJS = phone.replace(/'/g, "\\'");
+  return `
+    <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 200px;">
+      <a href="tel:${phone}" style="flex: 1; text-decoration: none; color: #3498db;">${phone}</a>
+      <button onclick="copyPhoneNumber('${cleanPhoneForJS}'); event.stopPropagation();" style="background: #3498db; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 3px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; justify-content: center;" title="نسخ الرقم">📋</button>
+      <button onclick="openWhatsApp('${cleanPhoneForJS}'); event.stopPropagation();" style="background: #25D366; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 3px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; justify-content: center;" title="فتح الواتساب">💬</button>
+    </div>
+  `;
+}
+
+// === نظام التقارير ===
+function openReports(username) {
+  // حفظ اسم المستخدم في localStorage للوصول إليه في صفحة التقارير
+  localStorage.setItem("reportUser", username);
+  window.location.href = "reports.html";
+}
+
+function openAllReports() {
+  window.location.href = "all-reports.html";
+}
+
+function calculateReports(username, startDate, endDate) {
+  const leads = JSON.parse(localStorage.getItem("leads") || "[]");
+  const meetings = JSON.parse(localStorage.getItem("meetings") || "[]");
+  
+  // تحويل التواريخ إلى Date objects للمقارنة
+  const start = startDate ? new Date(startDate) : new Date(0); // إذا لم يتم تحديد تاريخ، نبدأ من البداية
+  const end = endDate ? new Date(endDate + "T23:59:59") : new Date(); // إذا لم يتم تحديد تاريخ، ننتهي الآن
+  
+  // تصفية البيانات حسب المستخدم والتاريخ
+  const userLeads = leads.filter(lead => {
+    if (lead.assignedTo !== username) return false;
+    const leadDate = new Date(lead.createdAt);
+    return leadDate >= start && leadDate <= end;
+  });
+  
+  const userMeetings = meetings.filter(meeting => {
+    if (meeting.assignedTo !== username) return false;
+    const meetingDate = new Date(meeting.createdAt);
+    return meetingDate >= start && meetingDate <= end;
+  });
+  
+  // حساب إحصائيات Leads
+  const coldLeads = userLeads.filter(l => l.type === "cold");
+  const hotLeads = userLeads.filter(l => l.type === "hot");
+  const huntLeads = userLeads.filter(l => l.type === "hunt");
+  
+  // حساب إحصائيات Leads حسب الحالة
+  const getLeadStats = (leadsArray) => ({
+    total: leadsArray.length,
+    done: leadsArray.filter(l => l.status === "done").length,
+    inProgress: leadsArray.filter(l => l.status === "in-progress").length,
+    failed: leadsArray.filter(l => l.status === "failed").length,
+    new: leadsArray.filter(l => l.status === "new").length
+  });
+  
+  const coldLeadStats = getLeadStats(coldLeads);
+  const hotLeadStats = getLeadStats(hotLeads);
+  const huntLeadStats = getLeadStats(huntLeads);
+  
+  // حساب إحصائيات Meetings
+  const coldMeetings = userMeetings.filter(m => m.type === "cold meetings");
+  const hotMeetings = userMeetings.filter(m => m.type === "hot meetings");
+  const huntMeetings = userMeetings.filter(m => m.type === "hunt meetings");
+  
+  // حساب إحصائيات Meetings حسب الحالة
+  const getMeetingStats = (meetingsArray) => ({
+    total: meetingsArray.length,
+    done: meetingsArray.filter(m => m.status === "done").length,
+    inProgress: meetingsArray.filter(m => m.status === "in-progress").length,
+    failed: meetingsArray.filter(m => m.status === "failed").length,
+    new: meetingsArray.filter(m => m.status === "new").length
+  });
+  
+  const coldMeetingStats = getMeetingStats(coldMeetings);
+  const hotMeetingStats = getMeetingStats(hotMeetings);
+  const huntMeetingStats = getMeetingStats(huntMeetings);
+  
+  // حساب إحصائيات Meetings الممولة
+  const getFundedStats = (meetingsArray) => {
+    const funded = meetingsArray.filter(m => m.conversion === "funded");
+    const totalPrice = funded.reduce((sum, m) => {
+      const price = parseFloat(m.price) || 0;
+      return sum + price;
+    }, 0);
+    return {
+      count: funded.length,
+      totalPrice: totalPrice
+    };
+  };
+  
+  const coldFunded = getFundedStats(coldMeetings);
+  const hotFunded = getFundedStats(hotMeetings);
+  const huntFunded = getFundedStats(huntMeetings);
+  const totalFunded = getFundedStats(userMeetings);
+  
+  return {
+    // Leads
+    coldLeads: coldLeadStats,
+    hotLeads: hotLeadStats,
+    huntLeads: huntLeadStats,
+    totalLeads: userLeads.length,
+    
+    // Meetings
+    coldMeetings: coldMeetingStats,
+    hotMeetings: hotMeetingStats,
+    huntMeetings: huntMeetingStats,
+    totalMeetings: userMeetings.length,
+    
+    // Funded Meetings
+    coldFunded: coldFunded,
+    hotFunded: hotFunded,
+    huntFunded: huntFunded,
+    totalFunded: totalFunded
+  };
+}
+
+function loadReports() {
+  loadCurrentUser();
+  
+  const reportUsername = localStorage.getItem("reportUser");
+  if (!reportUsername) {
+    alert("لم يتم تحديد مستخدم");
+    window.location.href = "users.html";
+    return;
+  }
+  
+  // عرض اسم المستخدم
+  document.getElementById("reportUserName").textContent = reportUsername;
+  
+  // تعيين التاريخ الافتراضي (الشهر الحالي)
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  
+  const startDateInput = document.getElementById("startDate");
+  const endDateInput = document.getElementById("endDate");
+  
+  startDateInput.value = firstDay.toISOString().split('T')[0];
+  endDateInput.value = lastDay.toISOString().split('T')[0];
+  
+  // حساب وعرض التقارير
+  updateReports();
+  
+  // إضافة مستمعي الأحداث لتحديث التقارير عند تغيير التاريخ
+  startDateInput.addEventListener("change", updateReports);
+  endDateInput.addEventListener("change", updateReports);
+}
+
+function updateReports() {
+  const reportUsername = localStorage.getItem("reportUser");
+  const startDate = document.getElementById("startDate").value;
+  const endDate = document.getElementById("endDate").value;
+  
+  if (!startDate || !endDate) {
+    alert("يرجى تحديد تاريخ البداية والنهاية");
+    return;
+  }
+  
+  const stats = calculateReports(reportUsername, startDate, endDate);
+  
+  // عرض إحصائيات Leads
+  document.getElementById("coldLeadsTotal").textContent = stats.coldLeads.total;
+  document.getElementById("coldLeadsDone").textContent = stats.coldLeads.done;
+  document.getElementById("coldLeadsInProgress").textContent = stats.coldLeads.inProgress;
+  document.getElementById("coldLeadsFailed").textContent = stats.coldLeads.failed;
+  document.getElementById("coldLeadsNew").textContent = stats.coldLeads.new;
+  
+  document.getElementById("hotLeadsTotal").textContent = stats.hotLeads.total;
+  document.getElementById("hotLeadsDone").textContent = stats.hotLeads.done;
+  document.getElementById("hotLeadsInProgress").textContent = stats.hotLeads.inProgress;
+  document.getElementById("hotLeadsFailed").textContent = stats.hotLeads.failed;
+  document.getElementById("hotLeadsNew").textContent = stats.hotLeads.new;
+  
+  document.getElementById("huntLeadsTotal").textContent = stats.huntLeads.total;
+  document.getElementById("huntLeadsDone").textContent = stats.huntLeads.done;
+  document.getElementById("huntLeadsInProgress").textContent = stats.huntLeads.inProgress;
+  document.getElementById("huntLeadsFailed").textContent = stats.huntLeads.failed;
+  document.getElementById("huntLeadsNew").textContent = stats.huntLeads.new;
+  
+  document.getElementById("totalLeads").textContent = stats.totalLeads;
+  
+  // عرض إحصائيات Meetings
+  document.getElementById("coldMeetingsTotal").textContent = stats.coldMeetings.total;
+  document.getElementById("coldMeetingsDone").textContent = stats.coldMeetings.done;
+  document.getElementById("coldMeetingsInProgress").textContent = stats.coldMeetings.inProgress;
+  document.getElementById("coldMeetingsFailed").textContent = stats.coldMeetings.failed;
+  document.getElementById("coldMeetingsNew").textContent = stats.coldMeetings.new;
+  
+  document.getElementById("hotMeetingsTotal").textContent = stats.hotMeetings.total;
+  document.getElementById("hotMeetingsDone").textContent = stats.hotMeetings.done;
+  document.getElementById("hotMeetingsInProgress").textContent = stats.hotMeetings.inProgress;
+  document.getElementById("hotMeetingsFailed").textContent = stats.hotMeetings.failed;
+  document.getElementById("hotMeetingsNew").textContent = stats.hotMeetings.new;
+  
+  document.getElementById("huntMeetingsTotal").textContent = stats.huntMeetings.total;
+  document.getElementById("huntMeetingsDone").textContent = stats.huntMeetings.done;
+  document.getElementById("huntMeetingsInProgress").textContent = stats.huntMeetings.inProgress;
+  document.getElementById("huntMeetingsFailed").textContent = stats.huntMeetings.failed;
+  document.getElementById("huntMeetingsNew").textContent = stats.huntMeetings.new;
+  
+  document.getElementById("totalMeetings").textContent = stats.totalMeetings;
+  
+  // عرض إحصائيات Meetings الممولة
+  document.getElementById("coldFundedCount").textContent = stats.coldFunded.count;
+  document.getElementById("coldFundedPrice").textContent = stats.coldFunded.totalPrice.toFixed(2);
+  
+  document.getElementById("hotFundedCount").textContent = stats.hotFunded.count;
+  document.getElementById("hotFundedPrice").textContent = stats.hotFunded.totalPrice.toFixed(2);
+  
+  document.getElementById("huntFundedCount").textContent = stats.huntFunded.count;
+  document.getElementById("huntFundedPrice").textContent = stats.huntFunded.totalPrice.toFixed(2);
+  
+  document.getElementById("totalFundedCount").textContent = stats.totalFunded.count;
+  document.getElementById("totalFundedPrice").textContent = stats.totalFunded.totalPrice.toFixed(2);
+}
+
+function calculateAllUsersReports(startDate, endDate) {
+  const users = JSON.parse(localStorage.getItem("users") || "[]");
+  const allStats = [];
+  
+  // تحديد المستخدمين الذين يجب عرض تقاريرهم
+  let usersToShow = [];
+  
+  if (currentUser.role === "admin") {
+    // Admin يرى جميع المستخدمين عدا admin
+    usersToShow = users.filter(user => user.username !== "admin");
+  } else if (currentUser.role === "manager") {
+    // Manager يرى نفسه والمستخدمين الذين يرأسهم
+    usersToShow = users.filter(user => 
+      user.username !== "admin" && 
+      (user.username === currentUser.username || user.manager === currentUser.username)
+    );
+  } else {
+    // المستخدمون الآخرون لا يرون تقارير متعددة
+    usersToShow = [];
+  }
+  
+  // حساب التقارير لكل مستخدم
+  usersToShow.forEach(user => {
+    const stats = calculateReports(user.username, startDate, endDate);
+    allStats.push({
+      username: user.username,
+      role: user.role,
+      stats: stats
+    });
+  });
+  
+  return allStats;
+}
+
+function loadAllReports() {
+  loadCurrentUser();
+  
+  // التحقق من الصلاحيات
+  if (currentUser.role !== "admin" && currentUser.role !== "manager") {
+    alert("غير مصرح لك بالوصول إلى هذه الصفحة");
+    window.location.href = "users.html";
+    return;
+  }
+  
+  // لا حاجة للتحقق من وجود مستخدمين يرأسهم لأن المدير سيعرض تقاريره الشخصية على الأقل
+  
+  // تعيين التاريخ الافتراضي (الشهر الحالي)
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  
+  const startDateInput = document.getElementById("startDate");
+  const endDateInput = document.getElementById("endDate");
+  
+  startDateInput.value = firstDay.toISOString().split('T')[0];
+  endDateInput.value = lastDay.toISOString().split('T')[0];
+  
+  // حساب وعرض التقارير
+  updateAllReports();
+  
+  // إضافة مستمعي الأحداث لتحديث التقارير عند تغيير التاريخ
+  startDateInput.addEventListener("change", updateAllReports);
+  endDateInput.addEventListener("change", updateAllReports);
+}
+
+function updateAllReports() {
+  const startDate = document.getElementById("startDate").value;
+  const endDate = document.getElementById("endDate").value;
+  
+  if (!startDate || !endDate) {
+    alert("يرجى تحديد تاريخ البداية والنهاية");
+    return;
+  }
+  
+  const allStats = calculateAllUsersReports(startDate, endDate);
+  const tbody = document.querySelector("#allReportsTable tbody");
+  tbody.innerHTML = "";
+  
+  // حساب الإجماليات
+  let totalColdLeads = 0, totalHotLeads = 0, totalHuntLeads = 0, totalLeads = 0;
+  let totalColdMeetings = 0, totalHotMeetings = 0, totalHuntMeetings = 0, totalMeetings = 0;
+  let totalColdFunded = 0, totalHotFunded = 0, totalHuntFunded = 0, totalFunded = 0;
+  let totalColdFundedPrice = 0, totalHotFundedPrice = 0, totalHuntFundedPrice = 0, totalFundedPrice = 0;
+  
+  allStats.forEach(userData => {
+    const { username, role, stats } = userData;
+    
+    // إضافة صف للمستخدم
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${username}</strong><br><small>${getRoleText(role)}</small></td>
+      <td>${stats.coldLeads.total}</td>
+      <td>${stats.coldLeads.done}</td>
+      <td>${stats.coldLeads.inProgress}</td>
+      <td>${stats.coldLeads.failed}</td>
+      <td>${stats.hotLeads.total}</td>
+      <td>${stats.hotLeads.done}</td>
+      <td>${stats.hotLeads.inProgress}</td>
+      <td>${stats.hotLeads.failed}</td>
+      <td>${stats.huntLeads.total}</td>
+      <td>${stats.huntLeads.done}</td>
+      <td>${stats.huntLeads.inProgress}</td>
+      <td>${stats.huntLeads.failed}</td>
+      <td><strong>${stats.totalLeads}</strong></td>
+      <td>${stats.coldMeetings.total}</td>
+      <td>${stats.coldMeetings.done}</td>
+      <td>${stats.coldMeetings.inProgress}</td>
+      <td>${stats.coldMeetings.failed}</td>
+      <td>${stats.hotMeetings.total}</td>
+      <td>${stats.hotMeetings.done}</td>
+      <td>${stats.hotMeetings.inProgress}</td>
+      <td>${stats.hotMeetings.failed}</td>
+      <td>${stats.huntMeetings.total}</td>
+      <td>${stats.huntMeetings.done}</td>
+      <td>${stats.huntMeetings.inProgress}</td>
+      <td>${stats.huntMeetings.failed}</td>
+      <td><strong>${stats.totalMeetings}</strong></td>
+      <td>${stats.coldFunded.count}</td>
+      <td>${stats.coldFunded.totalPrice.toFixed(2)}</td>
+      <td>${stats.hotFunded.count}</td>
+      <td>${stats.hotFunded.totalPrice.toFixed(2)}</td>
+      <td>${stats.huntFunded.count}</td>
+      <td>${stats.huntFunded.totalPrice.toFixed(2)}</td>
+      <td><strong>${stats.totalFunded.count}</strong></td>
+      <td><strong>${stats.totalFunded.totalPrice.toFixed(2)}</strong></td>
+    `;
+    tbody.appendChild(tr);
+    
+    // جمع الإجماليات
+    totalColdLeads += stats.coldLeads.total;
+    totalHotLeads += stats.hotLeads.total;
+    totalHuntLeads += stats.huntLeads.total;
+    totalLeads += stats.totalLeads;
+    
+    totalColdMeetings += stats.coldMeetings.total;
+    totalHotMeetings += stats.hotMeetings.total;
+    totalHuntMeetings += stats.huntMeetings.total;
+    totalMeetings += stats.totalMeetings;
+    
+    totalColdFunded += stats.coldFunded.count;
+    totalHotFunded += stats.hotFunded.count;
+    totalHuntFunded += stats.huntFunded.count;
+    totalFunded += stats.totalFunded.count;
+    
+    totalColdFundedPrice += stats.coldFunded.totalPrice;
+    totalHotFundedPrice += stats.hotFunded.totalPrice;
+    totalHuntFundedPrice += stats.huntFunded.totalPrice;
+    totalFundedPrice += stats.totalFunded.totalPrice;
+  });
+  
+  // إضافة صف الإجمالي
+  const totalRow = document.createElement("tr");
+  totalRow.className = "total-row";
+  totalRow.innerHTML = `
+    <td><strong>الإجمالي</strong></td>
+    <td><strong>${totalColdLeads}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalHotLeads}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalHuntLeads}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalLeads}</strong></td>
+    <td><strong>${totalColdMeetings}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalHotMeetings}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalHuntMeetings}</strong></td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td><strong>${totalMeetings}</strong></td>
+    <td><strong>${totalColdFunded}</strong></td>
+    <td><strong>${totalColdFundedPrice.toFixed(2)}</strong></td>
+    <td><strong>${totalHotFunded}</strong></td>
+    <td><strong>${totalHotFundedPrice.toFixed(2)}</strong></td>
+    <td><strong>${totalHuntFunded}</strong></td>
+    <td><strong>${totalHuntFundedPrice.toFixed(2)}</strong></td>
+    <td><strong>${totalFunded}</strong></td>
+    <td><strong>${totalFundedPrice.toFixed(2)}</strong></td>
+  `;
+  tbody.appendChild(totalRow);
+}

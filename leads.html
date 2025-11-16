@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>إدارة العملاء</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+</head>
+<body>
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>إدارة العملاء</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+  <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+  </nav>
+
+
+  <main>
+    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+      <button onclick="showAddModal()" class="add-btn">+ إضافة عميل جديد</button>
+      <button onclick="downloadExcelTemplate()" class="add-btn" style="background: #27ae60;">📥 تحميل قالب Excel</button>
+      <button onclick="document.getElementById('excelFileInput').click()" class="add-btn" style="background: #3498db;">📤 استيراد من Excel</button>
+      <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;" onchange="importFromExcel(event)">
+    </div>
+
+    <h2>عدد العملاء: <span id="leadsCount">0</span></h2>
+
+    <!-- نموذج إضافة عميل -->
+    <div id="addModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>إضافة عميل جديد</h2>
+        <form id="addLeadForm">
+          <input type="text" placeholder="اسم الشركة" id="company" required />
+          <input type="tel" placeholder="رقم الهاتف" id="phone" required />
+          <input type="url" placeholder="رابط المتجر (اختياري)" id="storeLink" />
+          <select id="type" required>
+            <option value="cold">Cold Lead</option>
+            <option value="hot">Hot Lead</option>
+            <option value="hunt">Hunt Lead</option>
+          </select>
+          <button type="submit">إضافة</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- نموذج تعديل عميل -->
+    <div id="editLeadModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>تعديل بيانات العميل</h2>
+        <form id="editLeadForm">
+          <input type="hidden" id="editLeadId">
+          <input type="text" placeholder="اسم الشركة" id="editCompany" required />
+          <input type="tel" placeholder="رقم الهاتف" id="editPhone" required />
+          <input type="url" placeholder="رابط المتجر (اختياري)" id="editStoreLink" />
+          <select id="editType" required>
+            <option value="cold">Cold Lead</option>
+            <option value="hot">Hot Lead</option>
+            <option value="hunt">Hunt Lead</option>
+          </select>
+          <button type="submit">حفظ التعديلات</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- جدول العملاء -->
+    <table id="leadsTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>التاريخ والوقت</th>
+          <th>اسم الشركة</th>
+          <th>رقم الهاتف</th>
+          <th>رابط المتجر</th>
+          <th>النوع</th>
+          <th>حالة الرد</th>
+          <th>حالة التحويل</th>
+          <th>الموظف</th>
+          <th>ملاحظات</th>
+          <th>إجراء</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", initLeadsPage);
+  </script>
+</body>
+</html>

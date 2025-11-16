@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>عملائي</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+</head>
+<body>
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>عملائي</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+ <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+  </nav>
+
+
+  <main>
+    <h2>عدد العملاء: <span id="myCount">0</span></h2>
+    
+    <!-- نموذج تعديل عميل -->
+    <div id="editLeadModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>تعديل بيانات العميل</h2>
+        <form id="editLeadForm">
+          <input type="hidden" id="editLeadId">
+          <input type="text" placeholder="اسم الشركة" id="editCompany" required />
+          <input type="tel" placeholder="رقم الهاتف" id="editPhone" required />
+          <input type="url" placeholder="رابط المتجر (اختياري)" id="editStoreLink" />
+          <select id="editType" required>
+            <option value="cold">Cold Lead</option>
+            <option value="hot">Hot Lead</option>
+            <option value="hunt">Hunt Lead</option>
+          </select>
+          <button type="submit">حفظ التعديلات</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- نموذج تعديل الملاحظات -->
+    <div id="editNotesModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeNotesModal()">×</span>
+        <h2>تعديل الملاحظات</h2>
+        <form id="editNotesForm">
+          <input type="hidden" id="editNotesLeadId">
+          <textarea id="editNotesText" rows="6" placeholder="اكتب الملاحظات..." style="width: 100%; padding: 0.75rem; margin: 0.5rem 0; border: 1px solid #ddd; border-radius: 5px; font-family: inherit; resize: vertical;"></textarea>
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+            <button type="button" onclick="closeNotesModal()" style="background: #95a5a6;">إلغاء</button>
+            <button type="submit" style="background: var(--brand-gradient);">حفظ</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <table id="myLeadsTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>التاريخ</th>
+          <th>الشركة</th>
+          <th>الهاتف</th>
+          <th>رابط المتجر</th>
+          <th>النوع</th>
+          <th>حالة الرد</th>
+          <th>تحويل لاجتماع </th>
+          <th>ملاحظات</th>
+          <th>ملاحظات السيلز</th>
+          <th>إجراء</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      initMyLeads();
+      // إخفاء "الرئيسية" عن السيلز وتلي سيلز
+      const user = JSON.parse(localStorage.getItem("currentUser"));
+      if (user && (user.role === "sales" || user.role === "telesales")) {
+        const dashboardLink = document.getElementById("dashboardLink");
+        if (dashboardLink) dashboardLink.style.display = "none";
+      }
+    });
+  </script>
+  
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

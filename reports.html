@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>تقارير المستخدم</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+  <style>
+    .reports-container {
+      max-width: 1400px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    
+    .date-filter {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    
+    .date-filter h2 {
+      margin-bottom: 1rem;
+      color: var(--text-dark);
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+    
+    .date-inputs {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .date-inputs label {
+      font-weight: bold;
+      color: var(--text-muted);
+    }
+    
+    .date-inputs input[type="date"] {
+      padding: 0.5rem;
+      border: 1px solid #e6e8f0;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    
+    .report-section {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    
+    .report-section h3 {
+      color: var(--text-dark);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid var(--brand-blue);
+      font-weight: 800;
+    }
+    
+    .stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    
+    .stats-table th,
+    .stats-table td {
+      padding: 0.75rem;
+      text-align: center;
+      border: 1px solid #e6e8f0;
+    }
+    
+    .stats-table th {
+      background: var(--brand-blue);
+      color: white;
+      font-weight: bold;
+    }
+    
+    .stats-table tr:nth-child(even) {
+      background: var(--surface-alt);
+    }
+    
+    .stats-table tr:hover {
+      background: #eef6ff;
+    }
+    
+    .total-row {
+      background: var(--brand-blue) !important;
+      color: white;
+      font-weight: bold;
+    }
+    
+    .funded-section {
+      background: #e8f5e9;
+      border-left: 4px solid #27ae60;
+    }
+    
+    .funded-section h3 {
+      border-bottom-color: #27ae60;
+    }
+    
+    .back-btn {
+      background: var(--brand-gradient);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .back-btn:hover {
+      filter: brightness(1.05);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>تقارير المستخدم</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+  <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+  </nav>
+
+  <main class="reports-container">
+    <button class="back-btn" onclick="window.location.href='users.html'">← العودة إلى إدارة المستخدمين</button>
+    
+    <div class="date-filter">
+      <h2>تقارير المستخدم: <span id="reportUserName"></span></h2>
+      <div class="date-inputs">
+        <label>من تاريخ:</label>
+        <input type="date" id="startDate" />
+        <label>إلى تاريخ:</label>
+        <input type="date" id="endDate" />
+      </div>
+    </div>
+
+    <!-- تقارير Leads -->
+    <div class="report-section">
+      <h3>تقارير العملاء (Leads)</h3>
+      
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th>النوع</th>
+            <th>الإجمالي</th>
+            <th>تم</th>
+            <th>تحت التنفيذ</th>
+            <th>فشل</th>
+            <th>جديد</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cold Leads</strong></td>
+            <td id="coldLeadsTotal">0</td>
+            <td id="coldLeadsDone">0</td>
+            <td id="coldLeadsInProgress">0</td>
+            <td id="coldLeadsFailed">0</td>
+            <td id="coldLeadsNew">0</td>
+          </tr>
+          <tr>
+            <td><strong>Hot Leads</strong></td>
+            <td id="hotLeadsTotal">0</td>
+            <td id="hotLeadsDone">0</td>
+            <td id="hotLeadsInProgress">0</td>
+            <td id="hotLeadsFailed">0</td>
+            <td id="hotLeadsNew">0</td>
+          </tr>
+          <tr>
+            <td><strong>Hunt Leads</strong></td>
+            <td id="huntLeadsTotal">0</td>
+            <td id="huntLeadsDone">0</td>
+            <td id="huntLeadsInProgress">0</td>
+            <td id="huntLeadsFailed">0</td>
+            <td id="huntLeadsNew">0</td>
+          </tr>
+          <tr class="total-row">
+            <td><strong>إجمالي Leads</strong></td>
+            <td id="totalLeads">0</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- تقارير Meetings -->
+    <div class="report-section">
+      <h3>تقارير الاجتماعات (Meetings)</h3>
+      
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th>النوع</th>
+            <th>الإجمالي</th>
+            <th>تم</th>
+            <th>تحت التنفيذ</th>
+            <th>فشل</th>
+            <th>جديد</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cold Meetings</strong></td>
+            <td id="coldMeetingsTotal">0</td>
+            <td id="coldMeetingsDone">0</td>
+            <td id="coldMeetingsInProgress">0</td>
+            <td id="coldMeetingsFailed">0</td>
+            <td id="coldMeetingsNew">0</td>
+          </tr>
+          <tr>
+            <td><strong>Hot Meetings</strong></td>
+            <td id="hotMeetingsTotal">0</td>
+            <td id="hotMeetingsDone">0</td>
+            <td id="hotMeetingsInProgress">0</td>
+            <td id="hotMeetingsFailed">0</td>
+            <td id="hotMeetingsNew">0</td>
+          </tr>
+          <tr>
+            <td><strong>Hunt Meetings</strong></td>
+            <td id="huntMeetingsTotal">0</td>
+            <td id="huntMeetingsDone">0</td>
+            <td id="huntMeetingsInProgress">0</td>
+            <td id="huntMeetingsFailed">0</td>
+            <td id="huntMeetingsNew">0</td>
+          </tr>
+          <tr class="total-row">
+            <td><strong>إجمالي Meetings</strong></td>
+            <td id="totalMeetings">0</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- تقارير Meetings الممولة -->
+    <div class="report-section funded-section">
+      <h3>الاجتماعات الممولة (Funded Meetings)</h3>
+      
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th>النوع</th>
+            <th>العدد</th>
+            <th>إجمالي الأسعار</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cold Meetings Funded</strong></td>
+            <td id="coldFundedCount">0</td>
+            <td id="coldFundedPrice">0.00</td>
+          </tr>
+          <tr>
+            <td><strong>Hot Meetings Funded</strong></td>
+            <td id="hotFundedCount">0</td>
+            <td id="hotFundedPrice">0.00</td>
+          </tr>
+          <tr>
+            <td><strong>Hunt Meetings Funded</strong></td>
+            <td id="huntFundedCount">0</td>
+            <td id="huntFundedPrice">0.00</td>
+          </tr>
+          <tr class="total-row">
+            <td><strong>إجمالي Meetings Funded</strong></td>
+            <td id="totalFundedCount">0</td>
+            <td id="totalFundedPrice">0.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", loadReports);
+  </script>
+</body>
+</html>
+
