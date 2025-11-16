@@ -120,30 +120,27 @@ async function setNotifications(notifications) {
   return true;
 }
 
-// دالة للحصول على currentUser من Firebase
-async function getCurrentUserFromFirebase() {
-  if (typeof database === 'undefined' || !database) {
-    return null;
-  }
+// دالة للحصول على currentUser من localStorage (محلي لكل جهاز)
+function getCurrentUserFromLocalStorage() {
   try {
-    const currentUserData = await getFirebaseData('currentUser');
-    return currentUserData;
+    const currentUserData = localStorage.getItem('currentUser');
+    if (currentUserData) {
+      return JSON.parse(currentUserData);
+    }
+    return null;
   } catch (error) {
-    console.error('Error getting current user from Firebase:', error);
+    console.error('Error getting current user from localStorage:', error);
     return null;
   }
 }
 
-// دالة لحفظ currentUser في Firebase
-async function setCurrentUserInFirebase(user) {
-  if (typeof database === 'undefined' || !database) {
-    return false;
-  }
+// دالة لحفظ currentUser في localStorage (محلي لكل جهاز)
+function setCurrentUserInLocalStorage(user) {
   try {
-    await setFirebaseData('currentUser', user);
+    localStorage.setItem('currentUser', JSON.stringify(user));
     return true;
   } catch (error) {
-    console.error('Error setting current user in Firebase:', error);
+    console.error('Error setting current user in localStorage:', error);
     return false;
   }
 }
@@ -165,7 +162,7 @@ document.getElementById("loginForm")?.addEventListener("submit", async e => {
     }
     
     currentUser = user;
-    await setCurrentUserInFirebase(user);
+    setCurrentUserInLocalStorage(user);
     // توجيه حسب الصلاحيات أو الدور
     let redirect = "dashboard.html";
     if (user.role === "admin") {
@@ -227,8 +224,8 @@ function checkPagePermission(page) {
 // تحميل المستخدم
 async function loadCurrentUser() {
   try {
-    // الحصول على المستخدم من Firebase
-    const user = await getCurrentUserFromFirebase();
+    // الحصول على المستخدم من localStorage (محلي لكل جهاز)
+    const user = getCurrentUserFromLocalStorage();
     if (!user) {
       window.location.href = "index.html";
       return;
@@ -242,7 +239,7 @@ async function loadCurrentUser() {
     const updatedUser = users.find(u => u.username === user.username);
     if (updatedUser) {
       currentUser = updatedUser;
-      await setCurrentUserInFirebase(updatedUser);
+      setCurrentUserInLocalStorage(updatedUser);
     }
   } catch (error) {
     console.error('Error loading user from database:', error);
@@ -312,9 +309,9 @@ function hideLoadingPage() {
 
 async function logout() {
   try {
-    await removeFirebaseData('currentUser');
+    localStorage.removeItem('currentUser');
   } catch (error) {
-    console.error('Error removing current user from Firebase:', error);
+    console.error('Error removing current user from localStorage:', error);
   }
   currentUser = null;
   window.location.href = "index.html";
@@ -413,7 +410,7 @@ async function changeAdminPassword() {
   // تحديث المستخدم الحالي إذا كان هو المدير
   if (currentUser && currentUser.username === "admin") {
     currentUser.password = newPassword;
-    await setCurrentUserInFirebase(currentUser);
+    setCurrentUserInLocalStorage(currentUser);
   }
   
   // عرض رسالة النجاح
