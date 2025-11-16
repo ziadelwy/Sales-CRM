@@ -2866,7 +2866,21 @@ async function updateMeetingStatus(id, status) {
     }
   }
   
+  // حفظ الحالة السابقة للتحقق من التغيير
+  const previousStatus = meeting.status;
+  
   meeting.status = status;
+  
+  // إذا تم إرجاع حالة دخول الاجتماع إلى "فشل دخول الاجتماع" أو "تحت التنفيذ"،
+  // يتم إرجاع حالة التعاقد تلقائياً إلى "لم يتم التعاقد"
+  if ((status === "failed" || status === "in-progress") && previousStatus === "done") {
+    // إذا كانت الحالة السابقة "تم دخول الاجتماع" وتم تغييرها إلى "فشل" أو "تحت التنفيذ"
+    if (meeting.conversion === "funded") {
+      meeting.conversion = "unfunded";
+      meeting.price = ""; // إزالة السعر أيضاً
+    }
+  }
+  
   await setMeetings(meetings);
   
   // تحديث جدول اجتماعاتي لإظهار/إخفاء خيارات التحويل وزر الحفظ
