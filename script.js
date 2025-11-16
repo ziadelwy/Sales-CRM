@@ -1141,77 +1141,147 @@ function showImportUserSelection(rows, selectedType) {
       ? availableUsers.map(u => `<option value="${u.username}">${u.username} (${getRoleText(u.role)})</option>`).join('')
       : '<option value="" disabled selected>لا يوجد مستخدمين متاحين للاختيار</option>';
 
-    // إنشاء modal لاختيار المستخدم أو جعله متاحاً للجميع
+    // تصنيف المستخدمين حسب الدور
+    const salesUsers = availableUsers.filter(u => u.role === "sales");
+    const telesalesUsers = availableUsers.filter(u => u.role === "telesales");
+    const allSalesAndTelesales = [...salesUsers, ...telesalesUsers];
+    
+    // إنشاء modal لاختيار طريقة التوزيع
     const modal = document.createElement("div");
     modal.className = "modal";
     modal.style.display = "block";
     modal.innerHTML = `
-      <div class="modal-content">
+      <div class="modal-content" style="max-width: 600px;">
         <span class="close" onclick="this.parentElement.parentElement.remove(); localStorage.removeItem('${tempKey}');">×</span>
-        <h2>اختر المستخدم لتعيين العملاء له</h2>
+        <h2>اختر طريقة توزيع العملاء</h2>
         <p style="margin: 0.5rem 0; color: #555;">النوع المحدد: <strong>${getTypeText(selectedType)}</strong></p>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <select id="importUserSelect" style="width: 100%; padding: 0.5rem; font-size: 1rem;">
+        <p style="margin: 0.5rem 0; color: #555;">عدد العملاء: <strong>${rows.length}</strong></p>
+        
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin: 1.5rem 0;">
+          <label style="display:flex; align-items:center; gap:0.75rem; background:#f3f6f9; padding:1rem; border-radius:8px; cursor:pointer; border:2px solid #dfe3ea; transition:all 0.2s;">
+            <input type="radio" name="distributionType" value="single" id="distSingle" style="width:20px; height:20px; cursor:pointer;">
+            <div style="flex:1;">
+              <strong style="display:block; margin-bottom:0.25rem;">تعيين لمستخدم محدد</strong>
+              <small style="color:#777;">اختر مستخدم واحد لتعيين جميع العملاء له</small>
+            </div>
+          </label>
+          
+          <label style="display:flex; align-items:center; gap:0.75rem; background:#f3f6f9; padding:1rem; border-radius:8px; cursor:pointer; border:2px solid #dfe3ea; transition:all 0.2s;">
+            <input type="radio" name="distributionType" value="sales" id="distSales" style="width:20px; height:20px; cursor:pointer;" ${salesUsers.length === 0 ? 'disabled' : ''}>
+            <div style="flex:1;">
+              <strong style="display:block; margin-bottom:0.25rem;">توزيع على السيلز فقط (${salesUsers.length} مستخدم)</strong>
+              <small style="color:#777;">سيتم توزيع العملاء بالتساوي على جميع موظفي السيلز</small>
+            </div>
+          </label>
+          
+          <label style="display:flex; align-items:center; gap:0.75rem; background:#f3f6f9; padding:1rem; border-radius:8px; cursor:pointer; border:2px solid #dfe3ea; transition:all 0.2s;">
+            <input type="radio" name="distributionType" value="telesales" id="distTelesales" style="width:20px; height:20px; cursor:pointer;" ${telesalesUsers.length === 0 ? 'disabled' : ''}>
+            <div style="flex:1;">
+              <strong style="display:block; margin-bottom:0.25rem;">توزيع على التلي سيلز فقط (${telesalesUsers.length} مستخدم)</strong>
+              <small style="color:#777;">سيتم توزيع العملاء بالتساوي على جميع موظفي التلي سيلز</small>
+            </div>
+          </label>
+          
+          <label style="display:flex; align-items:center; gap:0.75rem; background:#f3f6f9; padding:1rem; border-radius:8px; cursor:pointer; border:2px solid #dfe3ea; transition:all 0.2s;">
+            <input type="radio" name="distributionType" value="both" id="distBoth" style="width:20px; height:20px; cursor:pointer;" ${allSalesAndTelesales.length === 0 ? 'disabled' : ''}>
+            <div style="flex:1;">
+              <strong style="display:block; margin-bottom:0.25rem;">توزيع على السيلز والتلي سيلز (${allSalesAndTelesales.length} مستخدم)</strong>
+              <small style="color:#777;">سيتم توزيع العملاء بالتساوي على جميع موظفي السيلز والتلي سيلز</small>
+            </div>
+          </label>
+          
+          <label style="display:flex; align-items:center; gap:0.75rem; background:#f3f6f9; padding:1rem; border-radius:8px; cursor:pointer; border:2px solid #dfe3ea; transition:all 0.2s;">
+            <input type="radio" name="distributionType" value="general" id="distGeneral" style="width:20px; height:20px; cursor:pointer;">
+            <div style="flex:1;">
+              <strong style="display:block; margin-bottom:0.25rem;">إتاحتها للجميع (غير مخصص)</strong>
+              <small style="color:#777;">سيتم إضافة العملاء كعُملاء غير مخصصين ويمكن لأي موظف اختيارهم لاحقاً</small>
+            </div>
+          </label>
+        </div>
+        
+        <div id="singleUserContainer" style="display:none; margin:1rem 0;">
+          <label style="display:block; margin-bottom:0.5rem; font-weight:600;">اختر المستخدم:</label>
+          <select id="importUserSelect" style="width: 100%; padding: 0.5rem; font-size: 1rem; border:1px solid #dfe3ea; border-radius:6px;">
             ${optionsHtml}
           </select>
-          <label style="display:flex; align-items:center; gap:0.5rem; background:#f3f6f9; padding:0.75rem; border-radius:6px; font-size:0.9rem;">
-            <input type="checkbox" id="importGeneralCheckbox">
-            جعل العملاء متاحين لجميع الموظفين (غير مخصص)
-          </label>
-          <small style="color:#777; line-height:1.4;">في حال تفعيل هذا الخيار سيتم إضافة العملاء كعُملاء غير مخصصين ويمكن لأي موظف اختيارهم لاحقاً من صفحة "جميع العملاء".</small>
         </div>
-        <div style="display: flex; gap: 1rem;">
-          <button id="confirmImportBtn" style="background: #27ae60; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">استيراد</button>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+          <button id="confirmImportBtn" style="background: #27ae60; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1; font-size:1rem; font-weight:600;">استيراد</button>
           <button onclick="this.closest('.modal').remove(); localStorage.removeItem('${tempKey}');" style="background: #95a5a6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 5px; cursor: pointer; flex: 1;">إلغاء</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
     
-    // إضافة مستمع للزر
+    // إضافة مستمعات للأزرار الراديوية
+    const singleUserContainer = document.getElementById("singleUserContainer");
     const userSelect = document.getElementById("importUserSelect");
-    const generalCheckbox = document.getElementById("importGeneralCheckbox");
-
-    const toggleSelectState = () => {
-      if (!generalCheckbox || !userSelect) return;
-      const disabled = generalCheckbox.checked;
-      userSelect.disabled = disabled;
-      userSelect.style.opacity = disabled ? "0.6" : "1";
-    };
-
-    if (generalCheckbox) {
-      generalCheckbox.addEventListener("change", toggleSelectState);
-    }
-
-    // إذا لم يكن هناك مستخدمون متاحون، فعّل الخيار العام تلقائياً
-    if (availableUsers.length === 0 && generalCheckbox) {
-      generalCheckbox.checked = true;
-      generalCheckbox.disabled = true;
-    }
-    // اجعل الاختيار الافتراضي للمستخدم الحالي (نفس الفكرة: لنفسي أولاً)
-    if (userSelect) {
-      const hasCurrent = Array.from(userSelect.options).some(opt => opt.value === currentUser.username);
-      if (hasCurrent) {
-        userSelect.value = currentUser.username;
-      } else if (userSelect.options.length > 0 && !generalCheckbox?.checked) {
-        // ابقِ على أول خيار متاح إن لم يكن المستخدم الحالي ضمن القائمة
-        userSelect.selectedIndex = 0;
+    const distributionRadios = document.querySelectorAll('input[name="distributionType"]');
+    
+    // إضافة مستمعات لتغيير طريقة التوزيع
+    distributionRadios.forEach(radio => {
+      radio.addEventListener('change', function() {
+        if (this.value === 'single') {
+          singleUserContainer.style.display = 'block';
+        } else {
+          singleUserContainer.style.display = 'none';
+        }
+      });
+    });
+    
+    // اجعل الاختيار الافتراضي "تعيين لمستخدم محدد" إذا كان هناك مستخدمون متاحون
+    if (availableUsers.length > 0) {
+      document.getElementById("distSingle").checked = true;
+      singleUserContainer.style.display = 'block';
+      // اجعل الاختيار الافتراضي للمستخدم الحالي
+      if (userSelect) {
+        const hasCurrent = Array.from(userSelect.options).some(opt => opt.value === currentUser.username);
+        if (hasCurrent) {
+          userSelect.value = currentUser.username;
+        } else if (userSelect.options.length > 0) {
+          userSelect.selectedIndex = 0;
+        }
       }
+    } else {
+      // إذا لم يكن هناك مستخدمون متاحون، فعّل الخيار العام تلقائياً
+      document.getElementById("distGeneral").checked = true;
     }
-    toggleSelectState();
 
     document.getElementById("confirmImportBtn").addEventListener("click", function() {
-      if (generalCheckbox && !generalCheckbox.checked) {
+      const selectedDistribution = document.querySelector('input[name="distributionType"]:checked')?.value;
+      
+      if (!selectedDistribution) {
+        alert("يرجى اختيار طريقة توزيع العملاء.");
+        return;
+      }
+      
+      if (selectedDistribution === 'single') {
         if (!userSelect || !userSelect.value) {
-          alert("يرجى اختيار مستخدم لتعيين العملاء له أو تفعيل خيار جعلهم متاحين للجميع.");
+          alert("يرجى اختيار مستخدم لتعيين العملاء له.");
           return;
         }
       }
+      
       const savedData = JSON.parse(localStorage.getItem(tempKey) || "{}");
-      const assignedUser = generalCheckbox && generalCheckbox.checked ? null : (userSelect ? userSelect.value : null);
       localStorage.removeItem(tempKey);
       modal.remove();
-      importLeadsFromExcel(savedData.rows || [], assignedUser, savedData.type);
+      
+      // تحديد المستخدمين المستهدفين حسب طريقة التوزيع
+      let targetUsers = [];
+      if (selectedDistribution === 'single') {
+        targetUsers = userSelect.value;
+      } else if (selectedDistribution === 'sales') {
+        targetUsers = salesUsers.map(u => u.username);
+      } else if (selectedDistribution === 'telesales') {
+        targetUsers = telesalesUsers.map(u => u.username);
+      } else if (selectedDistribution === 'both') {
+        targetUsers = allSalesAndTelesales.map(u => u.username);
+      } else if (selectedDistribution === 'general') {
+        targetUsers = null; // null يعني غير مخصص
+      }
+      
+      importLeadsFromExcel(savedData.rows || [], targetUsers, savedData.type);
     });
     })();
   }
@@ -1223,60 +1293,122 @@ async function importLeadsFromExcel(rows, assignedTo, selectedType) {
   let errorCount = 0;
   const errors = [];
   
-  rows.forEach((row, index) => {
-    try {
-      const company = (row[0] || "").toString().trim();
-      const phone = (row[1] || "").toString().trim();
-      const storeLink = (row[2] || "").toString().trim() || "-";
-      const notes = (row[3] || "").toString().trim() || "";
-      
-      // التحقق من البيانات المطلوبة
-      if (!company || !phone) {
-        errors.push(`الصف ${index + 2}: اسم الشركة ورقم الهاتف مطلوبان`);
-        errorCount++;
-        return;
-      }
-      
-      // استخدام النوع المحدد من المستخدم
-      const validTypes = ["cold", "hot", "hunt"];
-      const finalType = validTypes.includes(selectedType) ? selectedType : "cold";
-      
-      const finalAssignedTo = assignedTo ? assignedTo : null;
+  // تحديد طريقة التوزيع
+  // assignedTo يمكن أن يكون: null (غير مخصص), string (مستخدم واحد), array (قائمة مستخدمين للتوزيع)
+  const isArray = Array.isArray(assignedTo);
+  const isSingleUser = typeof assignedTo === 'string';
+  const isGeneral = assignedTo === null;
+  
+  // إذا كان assignedTo مصفوفة، نوزع العملاء بالتساوي
+  let userIndex = 0;
+  if (isArray && assignedTo.length > 0) {
+    // توزيع بالتساوي على المستخدمين
+    rows.forEach((row, index) => {
+      try {
+        const company = (row[0] || "").toString().trim();
+        const phone = (row[1] || "").toString().trim();
+        const storeLink = (row[2] || "").toString().trim() || "-";
+        const notes = (row[3] || "").toString().trim() || "";
+        
+        // التحقق من البيانات المطلوبة
+        if (!company || !phone) {
+          errors.push(`الصف ${index + 2}: اسم الشركة ورقم الهاتف مطلوبان`);
+          errorCount++;
+          return;
+        }
+        
+        // استخدام النوع المحدد من المستخدم
+        const validTypes = ["cold", "hot", "hunt"];
+        const finalType = validTypes.includes(selectedType) ? selectedType : "cold";
+        
+        // توزيع بالتساوي: نأخذ المستخدم التالي من القائمة
+        const assignedUser = assignedTo[userIndex % assignedTo.length];
+        userIndex++;
 
-      const newLead = {
-        id: Date.now().toString() + index,
-        company: company,
-        phone: phone,
-        storeLink: storeLink,
-        type: finalType,
-        status: "new",
-        assignedTo: finalAssignedTo,
-        enteredBy: currentUser.username,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        // حالة الرد الافتراضية
-        responseStatus: "لم يتم المحاوله",
-        responseStatusUpdatedAt: new Date().toISOString(),
-        notes: notes,
-        convertedToMeeting: false
-      };
-      
-      leads.push(newLead);
-      successCount++;
-    } catch (error) {
-      errors.push(`الصف ${index + 2}: ${error.message}`);
-      errorCount++;
-    }
-  });
+        const newLead = {
+          id: Date.now().toString() + index,
+          company: company,
+          phone: phone,
+          storeLink: storeLink,
+          type: finalType,
+          status: "new",
+          assignedTo: assignedUser,
+          enteredBy: currentUser.username,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          // حالة الرد الافتراضية
+          responseStatus: "لم يتم المحاوله",
+          responseStatusUpdatedAt: new Date().toISOString(),
+          notes: notes,
+          convertedToMeeting: false
+        };
+        
+        leads.push(newLead);
+        successCount++;
+      } catch (error) {
+        errors.push(`الصف ${index + 2}: ${error.message}`);
+        errorCount++;
+      }
+    });
+  } else {
+    // الحالة العادية: مستخدم واحد أو غير مخصص
+    rows.forEach((row, index) => {
+      try {
+        const company = (row[0] || "").toString().trim();
+        const phone = (row[1] || "").toString().trim();
+        const storeLink = (row[2] || "").toString().trim() || "-";
+        const notes = (row[3] || "").toString().trim() || "";
+        
+        // التحقق من البيانات المطلوبة
+        if (!company || !phone) {
+          errors.push(`الصف ${index + 2}: اسم الشركة ورقم الهاتف مطلوبان`);
+          errorCount++;
+          return;
+        }
+        
+        // استخدام النوع المحدد من المستخدم
+        const validTypes = ["cold", "hot", "hunt"];
+        const finalType = validTypes.includes(selectedType) ? selectedType : "cold";
+        
+        const finalAssignedTo = isSingleUser ? assignedTo : null;
+
+        const newLead = {
+          id: Date.now().toString() + index,
+          company: company,
+          phone: phone,
+          storeLink: storeLink,
+          type: finalType,
+          status: "new",
+          assignedTo: finalAssignedTo,
+          enteredBy: currentUser.username,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          // حالة الرد الافتراضية
+          responseStatus: "لم يتم المحاوله",
+          responseStatusUpdatedAt: new Date().toISOString(),
+          notes: notes,
+          convertedToMeeting: false
+        };
+        
+        leads.push(newLead);
+        successCount++;
+      } catch (error) {
+        errors.push(`الصف ${index + 2}: ${error.message}`);
+        errorCount++;
+      }
+    });
+  }
   
   await setLeads(leads);
   
   // عرض النتيجة
   let message = `تم استيراد ${successCount} عميل بنجاح`;
-  if (assignedTo === null) {
+  if (isArray && assignedTo.length > 0) {
+    message += `\n\nتم توزيعهم بالتساوي على ${assignedTo.length} مستخدم: ${assignedTo.join(', ')}`;
+  } else if (isSingleUser) {
+    message += `\n\nتم تعيينهم للمستخدم: ${assignedTo}`;
+  } else if (isGeneral) {
     message += `\n\nتم إضافة العملاء كعُملاء غير مخصصين ومتاحة لجميع الموظفين.`;
-  } else if (assignedTo) {
-    message += `\n\nتم تعيين العملاء للمستخدم: ${assignedTo}`;
   }
   if (errorCount > 0) {
     message += `\n\nحدثت ${errorCount} أخطاء:\n${errors.slice(0, 5).join('\n')}`;
