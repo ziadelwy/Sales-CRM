@@ -1932,17 +1932,7 @@ async function initUsersPage() {
     document.getElementById("newRole").addEventListener("change", function() {
       updateManagerFieldVisibility("newRole", "newManager");
     });
-    // إظهار زر تقارير جميع المستخدمين
-    const allReportsBtn = document.getElementById("allReportsBtn");
-    if (allReportsBtn) {
-      // إظهار الزر للـ admin دائماً
-      if (currentUser.role === "admin") {
-        allReportsBtn.style.display = "inline-block";
-      } else if (currentUser.role === "manager") {
-        // إظهار الزر للمدير (سيعرض تقاريره الشخصية على الأقل)
-        allReportsBtn.style.display = "inline-block";
-      }
-    }
+    // ملاحظة: زر تقارير جميع المستخدمين سيظهر تلقائياً بعد تحميل البيانات في loadUsersTable
     document.getElementById("editRole").addEventListener("change", function() {
       updateManagerFieldVisibility("editRole", "editManager");
     });
@@ -2244,6 +2234,12 @@ async function addUser(e) {
 }
 
 async function loadUsersTable() {
+  // إخفاء أزرار التقارير حتى يتم تحميل البيانات
+  const allReportsBtn = document.getElementById("allReportsBtn");
+  if (allReportsBtn) {
+    allReportsBtn.style.display = "none";
+  }
+  
   const users = await getUsers();
   const tbody = document.querySelector("#usersTable tbody");
   tbody.innerHTML = "";
@@ -2315,6 +2311,11 @@ async function loadUsersTable() {
     `;
     tbody.appendChild(tr);
   });
+  
+  // إظهار أزرار التقارير بعد تحميل البيانات
+  if (allReportsBtn && (currentUser.role === "admin" || currentUser.role === "manager")) {
+    allReportsBtn.style.display = "inline-block";
+  }
 }
 
 async function deleteUser(username) {
@@ -4082,13 +4083,55 @@ function formatPhoneWithIcons(phone) {
 
 // === نظام التقارير ===
 async function openReports(username) {
-  // حفظ اسم المستخدم في Firebase للوصول إليه في صفحة التقارير
-  await setFirebaseData('reportUser', username);
-  window.location.href = "reports.html";
+  try {
+    // التحقق من الصلاحيات - فقط المدير ورئيس القسم
+    await loadCurrentUser();
+    
+    if (!currentUser) {
+      alert("يجب تسجيل الدخول أولاً");
+      window.location.href = "index.html";
+      return;
+    }
+    
+    // التحقق من الدور - admin أو manager
+    const allowedRoles = ["admin", "manager"];
+    if (!allowedRoles.includes(currentUser.role)) {
+      alert("غير مصرح لك بالوصول إلى التقارير. هذه الصفحة متاحة فقط للمدير ورئيس القسم.");
+      return;
+    }
+    
+    // حفظ اسم المستخدم في Firebase للوصول إليه في صفحة التقارير
+    await setFirebaseData('reportUser', username);
+    window.location.href = "reports.html";
+  } catch (error) {
+    console.error("Error in openReports:", error);
+    alert("حدث خطأ أثناء فتح التقارير. يرجى المحاولة مرة أخرى.");
+  }
 }
 
-function openAllReports() {
-  window.location.href = "all-reports.html";
+async function openAllReports() {
+  try {
+    // التحقق من الصلاحيات - فقط المدير ورئيس القسم
+    await loadCurrentUser();
+    
+    if (!currentUser) {
+      alert("يجب تسجيل الدخول أولاً");
+      window.location.href = "index.html";
+      return;
+    }
+    
+    // التحقق من الدور - admin أو manager
+    const allowedRoles = ["admin", "manager"];
+    if (!allowedRoles.includes(currentUser.role)) {
+      alert("غير مصرح لك بالوصول إلى تقارير جميع المستخدمين. هذه الصفحة متاحة فقط للمدير ورئيس القسم.");
+      return;
+    }
+    
+    window.location.href = "all-reports.html";
+  } catch (error) {
+    console.error("Error in openAllReports:", error);
+    alert("حدث خطأ أثناء فتح تقارير جميع المستخدمين. يرجى المحاولة مرة أخرى.");
+  }
 }
 
 async function calculateReports(username, startDate, endDate) {
@@ -4108,7 +4151,8 @@ async function calculateReports(username, startDate, endDate) {
   
   const userMeetings = meetings.filter(meeting => {
     if (meeting.assignedTo !== username) return false;
-    const meetingDate = new Date(meeting.createdAt);
+    // استخدام تاريخ إنشاء الاجتماع أو تاريخ الجدولة (أيهما متاح)
+    const meetingDate = meeting.scheduledAt ? new Date(meeting.scheduledAt) : new Date(meeting.createdAt);
     return meetingDate >= start && meetingDate <= end;
   });
   
@@ -4121,9 +4165,9 @@ async function calculateReports(username, startDate, endDate) {
   const getLeadStats = (leadsArray) => ({
     total: leadsArray.length,
     done: leadsArray.filter(l => l.status === "done").length,
-    inProgress: leadsArray.filter(l => l.status === "in-progress").length,
-    failed: leadsArray.filter(l => l.status === "failed").length,
-    new: leadsArray.filter(l => l.status === "new").length
+    new: leadsArray.filter(l => l.status === "new" || l.status === "in-progress").length, // جديد يشمل new و in-progress
+    followUp: 0, // Leads لا تحتوي على follow-up
+    failed: leadsArray.filter(l => l.status === "failed").length
   });
   
   const coldLeadStats = getLeadStats(coldLeads);
@@ -4141,7 +4185,8 @@ async function calculateReports(username, startDate, endDate) {
     done: meetingsArray.filter(m => m.status === "done").length,
     inProgress: meetingsArray.filter(m => m.status === "in-progress").length,
     failed: meetingsArray.filter(m => m.status === "failed").length,
-    new: meetingsArray.filter(m => m.status === "new").length
+    new: meetingsArray.filter(m => m.status === "new" || m.status === "in-progress").length, // جديد يشمل new و in-progress
+    followUp: meetingsArray.filter(m => m.status === "follow-up").length
   });
   
   const coldMeetingStats = getMeetingStats(coldMeetings);
@@ -4188,7 +4233,23 @@ async function calculateReports(username, startDate, endDate) {
 }
 
 async function loadReports() {
-  await loadCurrentUser();
+  try {
+    await loadCurrentUser();
+    
+    // التحقق من الصلاحيات - فقط المدير ورئيس القسم
+    if (!currentUser) {
+      alert("يجب تسجيل الدخول أولاً");
+      window.location.href = "index.html";
+      return;
+    }
+    
+    // التحقق من الدور - admin أو manager
+    const allowedRoles = ["admin", "manager"];
+    if (!allowedRoles.includes(currentUser.role)) {
+      alert("غير مصرح لك بالوصول إلى التقارير. هذه الصفحة متاحة فقط للمدير ورئيس القسم.");
+      window.location.href = "index.html";
+      return;
+    }
   
   const reportUsername = await getFirebaseData('reportUser');
   if (!reportUsername) {
@@ -4211,80 +4272,204 @@ async function loadReports() {
   startDateInput.value = firstDay.toISOString().split('T')[0];
   endDateInput.value = lastDay.toISOString().split('T')[0];
   
+  // التحقق من وجود العناصر في الصفحة
+  if (!startDateInput || !endDateInput) {
+    throw new Error("عناصر التاريخ غير موجودة في الصفحة");
+  }
+  
   // حساب وعرض التقارير
-  updateReports();
+  await updateReports();
   
   // إضافة مستمعي الأحداث لتحديث التقارير عند تغيير التاريخ
   startDateInput.addEventListener("change", updateReports);
   endDateInput.addEventListener("change", updateReports);
+  } catch (error) {
+    console.error("Error in loadReports:", error);
+    console.error("Error details:", error.message, error.stack);
+    alert(`حدث خطأ أثناء تحميل التقارير: ${error.message || 'خطأ غير معروف'}. يرجى المحاولة مرة أخرى.`);
+  }
 }
 
 async function updateReports() {
-  const reportUsername = await getFirebaseData('reportUser');
-  const startDate = document.getElementById("startDate").value;
-  const endDate = document.getElementById("endDate").value;
-  
-  if (!startDate || !endDate) {
-    alert("يرجى تحديد تاريخ البداية والنهاية");
-    return;
-  }
-  
-  const stats = await calculateReports(reportUsername, startDate, endDate);
+  try {
+    const reportUsername = await getFirebaseData('reportUser');
+    if (!reportUsername) {
+      console.error("reportUsername is null or undefined");
+      return;
+    }
+    
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput = document.getElementById("endDate");
+    
+    if (!startDateInput || !endDateInput) {
+      console.error("Date inputs not found");
+      return;
+    }
+    
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    if (!startDate || !endDate) {
+      alert("يرجى تحديد تاريخ البداية والنهاية");
+      return;
+    }
+    
+    const stats = await calculateReports(reportUsername, startDate, endDate);
+    
+    // التحقق من وجود العناصر قبل عرض البيانات
+    const getElement = (id) => {
+      const el = document.getElementById(id);
+      if (!el) {
+        console.warn(`Element with id "${id}" not found`);
+      }
+      return el;
+    };
+    
+    // الحصول على جميع العناصر
+    const elements = {
+      // Leads elements
+      coldLeadsTotal: getElement("coldLeadsTotal"),
+      coldLeadsDone: getElement("coldLeadsDone"),
+      coldLeadsNew: getElement("coldLeadsNew"),
+      coldLeadsFollowUp: getElement("coldLeadsFollowUp"),
+      coldLeadsFailed: getElement("coldLeadsFailed"),
+      hotLeadsTotal: getElement("hotLeadsTotal"),
+      hotLeadsDone: getElement("hotLeadsDone"),
+      hotLeadsNew: getElement("hotLeadsNew"),
+      hotLeadsFollowUp: getElement("hotLeadsFollowUp"),
+      hotLeadsFailed: getElement("hotLeadsFailed"),
+      huntLeadsTotal: getElement("huntLeadsTotal"),
+      huntLeadsDone: getElement("huntLeadsDone"),
+      huntLeadsNew: getElement("huntLeadsNew"),
+      huntLeadsFollowUp: getElement("huntLeadsFollowUp"),
+      huntLeadsFailed: getElement("huntLeadsFailed"),
+      totalLeads: getElement("totalLeads"),
+      // Meetings elements
+      coldMeetingsTotal: getElement("coldMeetingsTotal"),
+      coldMeetingsDone: getElement("coldMeetingsDone"),
+      coldMeetingsNew: getElement("coldMeetingsNew"),
+      coldMeetingsFollowUp: getElement("coldMeetingsFollowUp"),
+      coldMeetingsFailed: getElement("coldMeetingsFailed"),
+      hotMeetingsTotal: getElement("hotMeetingsTotal"),
+      hotMeetingsDone: getElement("hotMeetingsDone"),
+      hotMeetingsNew: getElement("hotMeetingsNew"),
+      hotMeetingsFollowUp: getElement("hotMeetingsFollowUp"),
+      hotMeetingsFailed: getElement("hotMeetingsFailed"),
+      huntMeetingsTotal: getElement("huntMeetingsTotal"),
+      huntMeetingsDone: getElement("huntMeetingsDone"),
+      huntMeetingsNew: getElement("huntMeetingsNew"),
+      huntMeetingsFollowUp: getElement("huntMeetingsFollowUp"),
+      huntMeetingsFailed: getElement("huntMeetingsFailed"),
+      totalMeetings: getElement("totalMeetings"),
+      // Funded elements
+      coldFundedCount: getElement("coldFundedCount"),
+      coldFundedPrice: getElement("coldFundedPrice"),
+      hotFundedCount: getElement("hotFundedCount"),
+      hotFundedPrice: getElement("hotFundedPrice"),
+      huntFundedCount: getElement("huntFundedCount"),
+      huntFundedPrice: getElement("huntFundedPrice"),
+      totalFundedCount: getElement("totalFundedCount"),
+      totalFundedPrice: getElement("totalFundedPrice"),
+      // Performance elements
+      conversionRate: getElement("conversionRate"),
+      conversionRateDetails: getElement("conversionRateDetails"),
+      successRate: getElement("successRate"),
+      successRateDetails: getElement("successRateDetails"),
+      fundingRate: getElement("fundingRate"),
+      fundingRateDetails: getElement("fundingRateDetails"),
+      avgFundingValue: getElement("avgFundingValue"),
+      avgFundingValueDetails: getElement("avgFundingValueDetails"),
+      successfulMeetings: getElement("successfulMeetings"),
+      successfulMeetingsDetails: getElement("successfulMeetingsDetails"),
+      failedMeetings: getElement("failedMeetings"),
+      failedMeetingsDetails: getElement("failedMeetingsDetails")
+    };
   
   // عرض إحصائيات Leads
-  document.getElementById("coldLeadsTotal").textContent = stats.coldLeads.total;
-  document.getElementById("coldLeadsDone").textContent = stats.coldLeads.done;
-  document.getElementById("coldLeadsInProgress").textContent = stats.coldLeads.inProgress;
-  document.getElementById("coldLeadsFailed").textContent = stats.coldLeads.failed;
-  document.getElementById("coldLeadsNew").textContent = stats.coldLeads.new;
+  if (elements.coldLeadsTotal) elements.coldLeadsTotal.textContent = stats.coldLeads.total;
+  if (elements.coldLeadsDone) elements.coldLeadsDone.textContent = stats.coldLeads.done;
+  if (elements.coldLeadsNew) elements.coldLeadsNew.textContent = stats.coldLeads.new;
+  if (elements.coldLeadsFollowUp) elements.coldLeadsFollowUp.textContent = stats.coldLeads.followUp || 0;
+  if (elements.coldLeadsFailed) elements.coldLeadsFailed.textContent = stats.coldLeads.failed;
   
-  document.getElementById("hotLeadsTotal").textContent = stats.hotLeads.total;
-  document.getElementById("hotLeadsDone").textContent = stats.hotLeads.done;
-  document.getElementById("hotLeadsInProgress").textContent = stats.hotLeads.inProgress;
-  document.getElementById("hotLeadsFailed").textContent = stats.hotLeads.failed;
-  document.getElementById("hotLeadsNew").textContent = stats.hotLeads.new;
+  if (elements.hotLeadsTotal) elements.hotLeadsTotal.textContent = stats.hotLeads.total;
+  if (elements.hotLeadsDone) elements.hotLeadsDone.textContent = stats.hotLeads.done;
+  if (elements.hotLeadsNew) elements.hotLeadsNew.textContent = stats.hotLeads.new;
+  if (elements.hotLeadsFollowUp) elements.hotLeadsFollowUp.textContent = stats.hotLeads.followUp || 0;
+  if (elements.hotLeadsFailed) elements.hotLeadsFailed.textContent = stats.hotLeads.failed;
   
-  document.getElementById("huntLeadsTotal").textContent = stats.huntLeads.total;
-  document.getElementById("huntLeadsDone").textContent = stats.huntLeads.done;
-  document.getElementById("huntLeadsInProgress").textContent = stats.huntLeads.inProgress;
-  document.getElementById("huntLeadsFailed").textContent = stats.huntLeads.failed;
-  document.getElementById("huntLeadsNew").textContent = stats.huntLeads.new;
+  if (elements.huntLeadsTotal) elements.huntLeadsTotal.textContent = stats.huntLeads.total;
+  if (elements.huntLeadsDone) elements.huntLeadsDone.textContent = stats.huntLeads.done;
+  if (elements.huntLeadsNew) elements.huntLeadsNew.textContent = stats.huntLeads.new;
+  if (elements.huntLeadsFollowUp) elements.huntLeadsFollowUp.textContent = stats.huntLeads.followUp || 0;
+  if (elements.huntLeadsFailed) elements.huntLeadsFailed.textContent = stats.huntLeads.failed;
   
-  document.getElementById("totalLeads").textContent = stats.totalLeads;
+  if (elements.totalLeads) elements.totalLeads.textContent = stats.totalLeads;
   
   // عرض إحصائيات Meetings
-  document.getElementById("coldMeetingsTotal").textContent = stats.coldMeetings.total;
-  document.getElementById("coldMeetingsDone").textContent = stats.coldMeetings.done;
-  document.getElementById("coldMeetingsInProgress").textContent = stats.coldMeetings.inProgress;
-  document.getElementById("coldMeetingsFailed").textContent = stats.coldMeetings.failed;
-  document.getElementById("coldMeetingsNew").textContent = stats.coldMeetings.new;
+  if (elements.coldMeetingsTotal) elements.coldMeetingsTotal.textContent = stats.coldMeetings.total;
+  if (elements.coldMeetingsDone) elements.coldMeetingsDone.textContent = stats.coldMeetings.done;
+  if (elements.coldMeetingsNew) elements.coldMeetingsNew.textContent = stats.coldMeetings.new;
+  if (elements.coldMeetingsFollowUp) elements.coldMeetingsFollowUp.textContent = stats.coldMeetings.followUp || 0;
+  if (elements.coldMeetingsFailed) elements.coldMeetingsFailed.textContent = stats.coldMeetings.failed;
   
-  document.getElementById("hotMeetingsTotal").textContent = stats.hotMeetings.total;
-  document.getElementById("hotMeetingsDone").textContent = stats.hotMeetings.done;
-  document.getElementById("hotMeetingsInProgress").textContent = stats.hotMeetings.inProgress;
-  document.getElementById("hotMeetingsFailed").textContent = stats.hotMeetings.failed;
-  document.getElementById("hotMeetingsNew").textContent = stats.hotMeetings.new;
+  if (elements.hotMeetingsTotal) elements.hotMeetingsTotal.textContent = stats.hotMeetings.total;
+  if (elements.hotMeetingsDone) elements.hotMeetingsDone.textContent = stats.hotMeetings.done;
+  if (elements.hotMeetingsNew) elements.hotMeetingsNew.textContent = stats.hotMeetings.new;
+  if (elements.hotMeetingsFollowUp) elements.hotMeetingsFollowUp.textContent = stats.hotMeetings.followUp || 0;
+  if (elements.hotMeetingsFailed) elements.hotMeetingsFailed.textContent = stats.hotMeetings.failed;
   
-  document.getElementById("huntMeetingsTotal").textContent = stats.huntMeetings.total;
-  document.getElementById("huntMeetingsDone").textContent = stats.huntMeetings.done;
-  document.getElementById("huntMeetingsInProgress").textContent = stats.huntMeetings.inProgress;
-  document.getElementById("huntMeetingsFailed").textContent = stats.huntMeetings.failed;
-  document.getElementById("huntMeetingsNew").textContent = stats.huntMeetings.new;
+  if (elements.huntMeetingsTotal) elements.huntMeetingsTotal.textContent = stats.huntMeetings.total;
+  if (elements.huntMeetingsDone) elements.huntMeetingsDone.textContent = stats.huntMeetings.done;
+  if (elements.huntMeetingsNew) elements.huntMeetingsNew.textContent = stats.huntMeetings.new;
+  if (elements.huntMeetingsFollowUp) elements.huntMeetingsFollowUp.textContent = stats.huntMeetings.followUp || 0;
+  if (elements.huntMeetingsFailed) elements.huntMeetingsFailed.textContent = stats.huntMeetings.failed;
   
-  document.getElementById("totalMeetings").textContent = stats.totalMeetings;
+  if (elements.totalMeetings) elements.totalMeetings.textContent = stats.totalMeetings;
   
   // عرض إحصائيات Meetings الممولة
-  document.getElementById("coldFundedCount").textContent = stats.coldFunded.count;
-  document.getElementById("coldFundedPrice").textContent = stats.coldFunded.totalPrice.toFixed(2);
+  if (elements.coldFundedCount) elements.coldFundedCount.textContent = stats.coldFunded.count;
+  if (elements.coldFundedPrice) elements.coldFundedPrice.textContent = stats.coldFunded.totalPrice.toFixed(2);
   
-  document.getElementById("hotFundedCount").textContent = stats.hotFunded.count;
-  document.getElementById("hotFundedPrice").textContent = stats.hotFunded.totalPrice.toFixed(2);
+  if (elements.hotFundedCount) elements.hotFundedCount.textContent = stats.hotFunded.count;
+  if (elements.hotFundedPrice) elements.hotFundedPrice.textContent = stats.hotFunded.totalPrice.toFixed(2);
   
-  document.getElementById("huntFundedCount").textContent = stats.huntFunded.count;
-  document.getElementById("huntFundedPrice").textContent = stats.huntFunded.totalPrice.toFixed(2);
+  if (elements.huntFundedCount) elements.huntFundedCount.textContent = stats.huntFunded.count;
+  if (elements.huntFundedPrice) elements.huntFundedPrice.textContent = stats.huntFunded.totalPrice.toFixed(2);
   
-  document.getElementById("totalFundedCount").textContent = stats.totalFunded.count;
-  document.getElementById("totalFundedPrice").textContent = stats.totalFunded.totalPrice.toFixed(2);
+  if (elements.totalFundedCount) elements.totalFundedCount.textContent = stats.totalFunded.count;
+  if (elements.totalFundedPrice) elements.totalFundedPrice.textContent = stats.totalFunded.totalPrice.toFixed(2);
+  
+  // حساب تقارير الأداء والمعدلات
+  const conversionRate = stats.totalLeads > 0 ? ((stats.totalMeetings / stats.totalLeads) * 100).toFixed(2) : 0;
+  const successRate = stats.totalMeetings > 0 ? ((stats.coldMeetings.done + stats.hotMeetings.done + stats.huntMeetings.done) / stats.totalMeetings * 100).toFixed(2) : 0;
+  const fundingRate = stats.totalMeetings > 0 ? ((stats.totalFunded.count / stats.totalMeetings) * 100).toFixed(2) : 0;
+  const avgFundingValue = stats.totalFunded.count > 0 ? (stats.totalFunded.totalPrice / stats.totalFunded.count).toFixed(2) : 0;
+  const successfulMeetings = stats.coldMeetings.done + stats.hotMeetings.done + stats.huntMeetings.done;
+  const failedMeetings = stats.coldMeetings.failed + stats.hotMeetings.failed + stats.huntMeetings.failed;
+  
+  if (elements.conversionRate) elements.conversionRate.textContent = conversionRate + "%";
+  if (elements.conversionRateDetails) elements.conversionRateDetails.textContent = `${stats.totalMeetings} اجتماع من ${stats.totalLeads} عميل`;
+  
+  if (elements.successRate) elements.successRate.textContent = successRate + "%";
+  if (elements.successRateDetails) elements.successRateDetails.textContent = `${successfulMeetings} اجتماع ناجح من ${stats.totalMeetings} اجتماع`;
+  
+  if (elements.fundingRate) elements.fundingRate.textContent = fundingRate + "%";
+  if (elements.fundingRateDetails) elements.fundingRateDetails.textContent = `${stats.totalFunded.count} تعاقد من ${stats.totalMeetings} اجتماع`;
+  
+  if (elements.avgFundingValue) elements.avgFundingValue.textContent = avgFundingValue;
+  if (elements.avgFundingValueDetails) elements.avgFundingValueDetails.textContent = `متوسط السعر لكل تعاقد`;
+  
+  if (elements.successfulMeetings) elements.successfulMeetings.textContent = successfulMeetings;
+  if (elements.successfulMeetingsDetails) elements.successfulMeetingsDetails.textContent = `Cold: ${stats.coldMeetings.done}, Hot: ${stats.hotMeetings.done}, Hunt: ${stats.huntMeetings.done}`;
+  
+  if (elements.failedMeetings) elements.failedMeetings.textContent = failedMeetings;
+  if (elements.failedMeetingsDetails) elements.failedMeetingsDetails.textContent = `Cold: ${stats.coldMeetings.failed}, Hot: ${stats.hotMeetings.failed}, Hunt: ${stats.huntMeetings.failed}`;
+  } catch (error) {
+    console.error("Error in updateReports:", error);
+    console.error("Error details:", error.message, error.stack);
+    alert(`حدث خطأ أثناء تحديث التقارير: ${error.message || 'خطأ غير معروف'}. يرجى المحاولة مرة أخرى.`);
+  }
 }
 
 async function calculateAllUsersReports(startDate, endDate) {
@@ -4321,15 +4506,24 @@ async function calculateAllUsersReports(startDate, endDate) {
   return allStats;
 }
 
-function loadAllReports() {
-  loadCurrentUser();
-  
-  // التحقق من الصلاحيات
-  if (currentUser.role !== "admin" && currentUser.role !== "manager") {
-    alert("غير مصرح لك بالوصول إلى هذه الصفحة");
-    window.location.href = "users.html";
-    return;
-  }
+async function loadAllReports() {
+  try {
+    await loadCurrentUser();
+    
+    // التحقق من الصلاحيات - فقط المدير ورئيس القسم
+    if (!currentUser) {
+      alert("يجب تسجيل الدخول أولاً");
+      window.location.href = "index.html";
+      return;
+    }
+    
+    // التحقق من الدور - admin أو manager
+    const allowedRoles = ["admin", "manager"];
+    if (!allowedRoles.includes(currentUser.role)) {
+      alert("غير مصرح لك بالوصول إلى تقارير جميع المستخدمين. هذه الصفحة متاحة فقط للمدير ورئيس القسم.");
+      window.location.href = "index.html";
+      return;
+    }
   
   // لا حاجة للتحقق من وجود مستخدمين يرأسهم لأن المدير سيعرض تقاريره الشخصية على الأقل
   
@@ -4344,12 +4538,27 @@ function loadAllReports() {
   startDateInput.value = firstDay.toISOString().split('T')[0];
   endDateInput.value = lastDay.toISOString().split('T')[0];
   
+  // إخفاء صفحة التحميل
+  const loadingPage = document.getElementById("loadingPage");
+  if (loadingPage) {
+    loadingPage.style.display = "none";
+  }
+  
   // حساب وعرض التقارير
-  updateAllReports();
+  await updateAllReports();
   
   // إضافة مستمعي الأحداث لتحديث التقارير عند تغيير التاريخ
   startDateInput.addEventListener("change", updateAllReports);
   endDateInput.addEventListener("change", updateAllReports);
+  } catch (error) {
+    console.error("Error in loadAllReports:", error);
+    // إخفاء صفحة التحميل حتى في حالة الخطأ
+    const loadingPage = document.getElementById("loadingPage");
+    if (loadingPage) {
+      loadingPage.style.display = "none";
+    }
+    alert("حدث خطأ أثناء تحميل تقارير جميع المستخدمين. يرجى المحاولة مرة أخرى.");
+  }
 }
 
 async function updateAllReports() {
@@ -4380,28 +4589,34 @@ async function updateAllReports() {
       <td><strong>${username}</strong><br><small>${getRoleText(role)}</small></td>
       <td>${stats.coldLeads.total}</td>
       <td>${stats.coldLeads.done}</td>
-      <td>${stats.coldLeads.inProgress}</td>
+      <td>${stats.coldLeads.new}</td>
+      <td>${stats.coldLeads.followUp || 0}</td>
       <td>${stats.coldLeads.failed}</td>
       <td>${stats.hotLeads.total}</td>
       <td>${stats.hotLeads.done}</td>
-      <td>${stats.hotLeads.inProgress}</td>
+      <td>${stats.hotLeads.new}</td>
+      <td>${stats.hotLeads.followUp || 0}</td>
       <td>${stats.hotLeads.failed}</td>
       <td>${stats.huntLeads.total}</td>
       <td>${stats.huntLeads.done}</td>
-      <td>${stats.huntLeads.inProgress}</td>
+      <td>${stats.huntLeads.new}</td>
+      <td>${stats.huntLeads.followUp || 0}</td>
       <td>${stats.huntLeads.failed}</td>
       <td><strong>${stats.totalLeads}</strong></td>
       <td>${stats.coldMeetings.total}</td>
       <td>${stats.coldMeetings.done}</td>
-      <td>${stats.coldMeetings.inProgress}</td>
+      <td>${stats.coldMeetings.new}</td>
+      <td>${stats.coldMeetings.followUp || 0}</td>
       <td>${stats.coldMeetings.failed}</td>
       <td>${stats.hotMeetings.total}</td>
       <td>${stats.hotMeetings.done}</td>
-      <td>${stats.hotMeetings.inProgress}</td>
+      <td>${stats.hotMeetings.new}</td>
+      <td>${stats.hotMeetings.followUp || 0}</td>
       <td>${stats.hotMeetings.failed}</td>
       <td>${stats.huntMeetings.total}</td>
       <td>${stats.huntMeetings.done}</td>
-      <td>${stats.huntMeetings.inProgress}</td>
+      <td>${stats.huntMeetings.new}</td>
+      <td>${stats.huntMeetings.followUp || 0}</td>
       <td>${stats.huntMeetings.failed}</td>
       <td><strong>${stats.totalMeetings}</strong></td>
       <td>${stats.coldFunded.count}</td>
@@ -4446,11 +4661,14 @@ async function updateAllReports() {
     <td>-</td>
     <td>-</td>
     <td>-</td>
+    <td>-</td>
     <td><strong>${totalHotLeads}</strong></td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
+    <td>-</td>
     <td><strong>${totalHuntLeads}</strong></td>
+    <td>-</td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
@@ -4459,11 +4677,14 @@ async function updateAllReports() {
     <td>-</td>
     <td>-</td>
     <td>-</td>
+    <td>-</td>
     <td><strong>${totalHotMeetings}</strong></td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
+    <td>-</td>
     <td><strong>${totalHuntMeetings}</strong></td>
+    <td>-</td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
