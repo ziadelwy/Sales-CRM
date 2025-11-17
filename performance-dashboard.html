@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>لوحة تحكم الأداء - المبيعات والمالية</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .kpi-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s, box-shadow 0.2s;
+      border-right: 4px solid var(--brand-blue);
+    }
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+    .kpi-card.green {
+      border-right-color: #27ae60;
+    }
+    .kpi-card h3 {
+      color: var(--text-dark);
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+    .kpi-card .kpi-value {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--brand-blue);
+      margin-bottom: 0.5rem;
+    }
+    .kpi-card.green .kpi-value {
+      color: #27ae60;
+    }
+    .kpi-card .kpi-trend {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .kpi-icon {
+      background: rgba(119, 0, 196, 0.1);
+      padding: 0.75rem;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 0.75rem;
+    }
+    .kpi-card.green .kpi-icon {
+      background: rgba(39, 174, 96, 0.1);
+    }
+    .kpi-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--brand-blue);
+    }
+    .kpi-card.green .kpi-icon svg {
+      color: #27ae60;
+    }
+    .chart-container {
+      position: relative;
+      height: 400px;
+      margin-top: 1rem;
+    }
+    .donut-chart-container {
+      position: relative;
+      height: 350px;
+    }
+    .chart-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 2rem;
+    }
+    .chart-card h3 {
+      color: var(--text-dark);
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid var(--brand-blue);
+      padding-bottom: 0.5rem;
+    }
+    .filter-section {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 2rem;
+    }
+    .filter-section label {
+      color: var(--text-dark);
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-left: 1rem;
+    }
+    .filter-section select {
+      border: 2px solid var(--brand-blue);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      background: white;
+      cursor: pointer;
+    }
+    .filter-section select:focus {
+      outline: none;
+      border-color: var(--brand-purple);
+      box-shadow: 0 0 0 3px rgba(119, 0, 196, 0.1);
+    }
+    .filter-section button {
+      background: var(--brand-gradient);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-right: 1rem;
+    }
+    .filter-section button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(119, 0, 196, 0.3);
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .conversion-metrics {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .conversion-metrics .main-rate {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--brand-blue);
+      margin-bottom: 0.5rem;
+    }
+    .conversion-metrics .sub-metric {
+      font-size: 1rem;
+      color: var(--text-muted);
+      margin: 0.25rem 0;
+    }
+    #kpiTable {
+      font-size: 0.9rem;
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      position: relative;
+    }
+    #kpiTable thead {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--brand-blue);
+    }
+    #kpiTable th {
+      white-space: nowrap;
+      background: var(--brand-blue);
+      color: white;
+      padding: 0.75rem;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.2);
+      position: relative;
+    }
+    #kpiTable th:first-child {
+      position: sticky;
+      right: 0;
+      z-index: 101;
+      background: var(--brand-blue);
+    }
+    #kpiTable td {
+      white-space: nowrap;
+      padding: 0.75rem;
+      text-align: center;
+      border: 1px solid #e0e0e0;
+      background: var(--surface);
+    }
+    #kpiTable tbody tr:hover {
+      background: var(--surface-alt);
+    }
+    #kpiTable tbody tr:hover td {
+      background: var(--surface-alt);
+    }
+    #kpiTable tbody tr td:first-child {
+      background: var(--surface-alt);
+      font-weight: 700;
+      position: sticky;
+      right: 0;
+      z-index: 10;
+    }
+    #kpiTable tbody tr:hover td:first-child {
+      background: var(--surface-alt);
+    }
+    .main-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    @media (max-width: 768px) {
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+      .chart-container {
+        height: 300px;
+      }
+      .donut-chart-container {
+        height: 250px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- صفحة التحميل -->
+  <div id="loadingPage">
+    <div class="loading-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text">جاري تحميل البيانات...</div>
+  </div>
+
+  <header>
+    <div class="brand-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <h1>لوحة تحكم الأداء - المبيعات والمالية</h1>
+    <div class="user-info">
+      <span id="currentUser"></span>
+      <button onclick="logout()">تسجيل خروج</button>
+    </div>
+  </header>
+
+  <nav class="navbar">
+    <a href="leads.html">جميع العملاء</a>
+    <a href="my-leads.html">عملائي</a>
+    <a href="meetings.html">جميع الاجتماعات</a>
+    <a href="my-meetings.html">اجتماعاتي</a>
+    <a href="users.html" id="usersLink" style="display:none;">المستخدمين</a>
+    <a href="dashboard.html">الرئيسية</a>
+    <a href="performance-dashboard.html" style="background: var(--brand-gradient); color: white;">📊 لوحة الأداء</a>
+  </nav>
+
+  <main class="main-container">
+    <!-- فلتر الشهر -->
+    <div class="filter-section">
+      <label>فلترة حسب الشهر:</label>
+      <select id="monthFilter">
+        <option value="all">جميع الأشهر</option>
+        <option value="2025-09">سبتمبر 2025</option>
+        <option value="2025-10">أكتوبر 2025</option>
+        <option value="2025-11">نوفمبر 2025</option>
+      </select>
+      <button onclick="loadPerformanceDashboard()">تحديث البيانات</button>
+    </div>
+
+    <!-- بطاقات KPI -->
+    <div class="kpi-grid">
+      <!-- KPI 1: إجمالي محاولات الاتصال -->
+      <div class="kpi-card">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+            </svg>
+          </div>
+          <h3>إجمالي محاولات الاتصال</h3>
+        </div>
+        <p class="kpi-value" id="kpi1">0</p>
+        <div class="kpi-trend" id="kpi1Trend">
+          <span>MoM:</span>
+          <span>-</span>
+        </div>
+      </div>
+
+      <!-- KPI 6: التعاقدات (العدد) -->
+      <div class="kpi-card green">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <h3>التعاقدات (العدد)</h3>
+        </div>
+        <p class="kpi-value" id="kpi6">0</p>
+        <div class="kpi-trend" id="kpi6Trend">
+          <span>MoM:</span>
+          <span>-</span>
+        </div>
+      </div>
+
+      <!-- KPI 13: إجمالي قيمة التعاقدات -->
+      <div class="kpi-card green">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <h3>إجمالي قيمة التعاقدات</h3>
+        </div>
+        <p class="kpi-value" id="kpi13">0 ر.س</p>
+        <div class="kpi-trend" id="kpi13Trend">
+          <span>MoM:</span>
+          <span>-</span>
+        </div>
+      </div>
+
+      <!-- KPI 7: متوسط قيمة التعاقد -->
+      <div class="kpi-card">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+          </div>
+          <h3>متوسط قيمة التعاقد</h3>
+        </div>
+        <p class="kpi-value" id="kpi7">0 ر.س</p>
+        <div class="kpi-trend" id="kpi7Trend">
+          <span>MoM:</span>
+          <span>-</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: معدل الرد على المكالمات -->
+      <div class="kpi-card">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <h3>معدل الرد على المكالمات</h3>
+        </div>
+        <p class="kpi-value" id="kpi3">0%</p>
+      </div>
+
+      <!-- KPI 9: نسبة حضور الاجتماعات -->
+      <div class="kpi-card green">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+          <div class="kpi-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+          </div>
+          <h3>نسبة حضور الاجتماعات</h3>
+        </div>
+        <p class="kpi-value" id="kpi9">0%</p>
+      </div>
+    </div>
+
+    <!-- المخططات -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+      <!-- Sales Funnel Chart -->
+      <div class="chart-card">
+        <h3>مسار التحويل الكلي</h3>
+        <div class="chart-container">
+          <canvas id="funnelChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Conversion by Customer Type -->
+      <div class="chart-card">
+        <h3>التحويل حسب نوع العميل (KPI 5)</h3>
+        <div class="chart-container">
+          <canvas id="conversionByTypeChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contract Conversion Donut Chart -->
+    <div class="chart-card" style="margin-bottom: 2rem;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center;">
+        <div>
+          <h3 style="margin-bottom: 1.5rem;">معدل التحويل للتعاقد</h3>
+          <div class="conversion-metrics">
+            <p class="main-rate" id="conversionRate">0%</p>
+            <p class="sub-metric">معدل التحويل: <span id="conversionRateValue">0</span>%</p>
+            <p class="sub-metric">إجمالي الاجتماعات: <span id="totalRelevantMeetings">0</span></p>
+            <p class="sub-metric">التعاقدات: <span id="convertedMeetings">0</span></p>
+          </div>
+        </div>
+        <div class="donut-chart-container">
+          <canvas id="contractDonutChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول KPI معكوس -->
+    <div class="chart-card">
+      <h3 style="margin-bottom: 1rem;">جدول KPIs الشهري</h3>
+      <div style="overflow-x: auto; max-height: 600px; overflow-y: auto;">
+        <table id="kpiTable">
+        <thead>
+          <tr>
+            <th style="position: sticky; right: 0; z-index: 101; background: var(--brand-blue);">الشهر</th>
+            <th>KPI 1<br>إجمالي محاولات الاتصال</th>
+            <th>KPI 2<br>الأرقام الجديدة الواردة</th>
+            <th>KPI 3<br>معدل الرد على المكالمات</th>
+            <th>KPI 4<br>معدل التحويل إلى الاجتماع</th>
+            <th>KPI 6<br>التعاقدات (العدد)</th>
+            <th>KPI 7<br>متوسط قيمة التعاقد</th>
+            <th>KPI 8<br>إجمالي الاجتماعات المجدولة</th>
+            <th>KPI 9<br>نسبة حضور الاجتماعات</th>
+            <th>KPI 10<br>عملاء احتاجوا Second Meeting</th>
+            <th>KPI 11<br>نسبة الاجتماعات المنتهية</th>
+            <th>KPI 12<br>متوسط عدد الاجتماعات قبل الإنهاء</th>
+            <th>KPI 13<br>إجمالي قيمة التعاقدات</th>
+          </tr>
+        </thead>
+        <tbody id="kpiTableBody">
+          <!-- سيتم ملؤها ديناميكياً -->
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="script.js"></script>
+  <script>
+    // Initialize dashboard
+    document.addEventListener("DOMContentLoaded", async () => {
+      await loadCurrentUser();
+      if (!currentUser) {
+        window.location.href = "index.html";
+        return;
+      }
+      
+      // Hide loading page
+      const loadingPage = document.getElementById("loadingPage");
+      if (loadingPage) {
+        loadingPage.style.display = "none";
+      }
+      
+      // Load dashboard data
+      await loadPerformanceDashboard();
+      
+      // Add event listener for month filter
+      document.getElementById("monthFilter").addEventListener("change", loadPerformanceDashboard);
+    });
+
+    async function loadPerformanceDashboard() {
+      const monthFilter = document.getElementById("monthFilter").value;
+      await calculateAndDisplayKPIs(monthFilter);
+    }
+  </script>
+</body>
+</html>
+
