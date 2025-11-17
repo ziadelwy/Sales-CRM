@@ -1565,6 +1565,16 @@ async function editNotes(id, callback) {
     lead.notes = note;
     lead.updatedAt = new Date().toISOString();
     await setLeads(leads);
+    
+    // مزامنة الملاحظات مع الاجتماع المرتبط (إن وجد)
+    const meetings = await getMeetings();
+    const relatedMeeting = meetings.find(m => m.leadId === id);
+    if (relatedMeeting) {
+      relatedMeeting.telesalesNotes = note;
+      relatedMeeting.updatedAt = new Date().toISOString();
+      await setMeetings(meetings);
+    }
+    
     if (callback && typeof callback === 'function') {
       callback();
     } else {
@@ -1613,6 +1623,15 @@ async function saveNotesFromModal() {
   lead.notes = notes;
   lead.updatedAt = new Date().toISOString();
   await setLeads(leads);
+  
+  // مزامنة الملاحظات مع الاجتماع المرتبط (إن وجد)
+  const meetings = await getMeetings();
+  const relatedMeeting = meetings.find(m => m.leadId === leadId);
+  if (relatedMeeting) {
+    relatedMeeting.telesalesNotes = notes;
+    relatedMeeting.updatedAt = new Date().toISOString();
+    await setMeetings(meetings);
+  }
   
   closeNotesModal();
   loadMyLeadsTable();
@@ -2783,6 +2802,14 @@ async function startMeetingConversion(leadId) {
     adminFields.style.display = "none";
   }
   
+  // إظهار خيار تحويل الميتنج للموظف نفسه
+  const assignToSelfContainer = document.getElementById("assignToSelfContainer");
+  const assignToSelfCheckbox = document.getElementById("assignToSelfCheckbox");
+  if (assignToSelfContainer && assignToSelfCheckbox) {
+    assignToSelfContainer.style.display = "block";
+    assignToSelfCheckbox.checked = false; // افتراضياً غير محدد
+  }
+  
   modal.style.display = "block";
 }
 
@@ -3159,6 +3186,9 @@ async function loadMeetingsTable() {
     assignableUsers = usersAll.slice();
   }
 
+  // جلب العملاء المرتبطين بالاجتماعات لمزامنة الملاحظات
+  const leads = await getLeads();
+
   meetings.forEach((m, i) => {
     const canAssign = m.status === "new" && !m.assignedTo;
     const scheduledText = m.scheduledAt ? formatDateTime(m.scheduledAt) : "لم يتم تحديده";
@@ -3181,7 +3211,12 @@ async function loadMeetingsTable() {
       </td>
       <td>${m.assignedTo || "-"}</td>
       <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px;">
-        ${m.telesalesNotes ? escapeHtml(m.telesalesNotes.substring(0, 100)) + (m.telesalesNotes.length > 100 ? "..." : "") : "لا توجد ملاحظات"}
+        ${(() => {
+          // مزامنة ملاحظات السيلز من العميل المرتبط
+          const relatedLead = leads.find(l => l.id === m.leadId);
+          const salesNotes = relatedLead && relatedLead.notes ? relatedLead.notes : (m.telesalesNotes || "");
+          return salesNotes ? escapeHtml(salesNotes.substring(0, 100)) + (salesNotes.length > 100 ? "..." : "") : "لا توجد ملاحظات";
+        })()}
       </td>
       <td class="notes-cell">${escapeHtml(m.notes.substring(0, 20))}${m.notes.length > 20 ? "..." : ""}</td>
       <td>
@@ -3352,6 +3387,12 @@ function ensureMeetingDetailsModal() {
         <input type="time" id="meetingTimeInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
         <label style="display:block; margin-bottom:0.35rem;">رابط الاجتماع</label>
         <input type="url" id="meetingLinkInput" placeholder="https://example.com" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+        <div id="assignToSelfContainer" style="display:none; margin-bottom:1rem; padding:0.75rem; background:#f8f9fa; border-radius:6px; border:1px solid #dee2e6;">
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+            <input type="checkbox" id="assignToSelfCheckbox" />
+            <span style="font-weight:500;">تحويل الميتنج لي وإضافته في اجتماعاتي</span>
+          </label>
+        </div>
         <div id="adminOnlyFields" style="display:none;">
           <label style="display:block; margin-bottom:0.35rem;">دخول الاجتماع</label>
           <select id="meetingStatusInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
@@ -3533,6 +3574,12 @@ async function openMeetingDetailsForEdit(meetingId) {
     notesContainer.style.display = "block";
   }
   
+  // إخفاء خيار تحويل الميتنج للموظف نفسه في وضع التعديل
+  const assignToSelfContainer = document.getElementById("assignToSelfContainer");
+  if (assignToSelfContainer) {
+    assignToSelfContainer.style.display = "none";
+  }
+  
   // تفعيل جميع الحقول للمدير ورئيس القسم
   document.getElementById("meetingDateInput").disabled = false;
   document.getElementById("meetingTimeInput").disabled = false;
@@ -3610,6 +3657,12 @@ async function openMeetingDetailsForMyMeeting(meetingId) {
   const notesContainer = document.getElementById("meetingNotesContainer");
   if (notesContainer) {
     notesContainer.style.display = "block";
+  }
+  
+  // إخفاء خيار تحويل الميتنج للموظف نفسه في وضع التعديل
+  const assignToSelfContainer = document.getElementById("assignToSelfContainer");
+  if (assignToSelfContainer) {
+    assignToSelfContainer.style.display = "none";
   }
   
   // تعطيل الحقول إذا كان الاجتماع مقفولاً
@@ -3729,8 +3782,17 @@ async function saveMeetingDetails() {
       closeMeetingDetailsModal();
       return;
     }
-    // توزيع الاجتماع تلقائياً على موظفي السيلز بالتساوي
-    const assignedTo = await assignMeetingToSalesEqually(meetings);
+    // التحقق من خيار تحويل الميتنج للموظف نفسه
+    const assignToSelfCheckbox = document.getElementById("assignToSelfCheckbox");
+    let assignedTo = null;
+    
+    if (assignToSelfCheckbox && assignToSelfCheckbox.checked) {
+      // تحويل الميتنج للموظف نفسه
+      assignedTo = currentUser.username;
+    } else {
+      // توزيع الاجتماع تلقائياً على موظفي السيلز بالتساوي
+      assignedTo = await assignMeetingToSalesEqually(meetings);
+    }
     
     const newMeeting = {
       id: Date.now().toString(),
@@ -3755,12 +3817,19 @@ async function saveMeetingDetails() {
     lead.updatedAt = new Date().toISOString();
     await setLeads(leads);
     
-    // إرسال إشعار للموظف إذا تم التوزيع التلقائي
+    // إرسال إشعار للموظف إذا تم التوزيع التلقائي أو التحويل للموظف نفسه
     if (assignedTo) {
-      pushNotification("meeting_assigned", `تم توجيه اجتماع إليك تلقائياً: ${lead.company}`, [assignedTo]);
+      const assignToSelfCheckbox = document.getElementById("assignToSelfCheckbox");
+      if (assignToSelfCheckbox && assignToSelfCheckbox.checked) {
+        // إذا تم التحويل للموظف نفسه، لا حاجة لإرسال إشعار
+        alert(`تم إنشاء الاجتماع وتحويل العميل بنجاح. تم تحويل الميتنج لك وإضافته في اجتماعاتك.`);
+      } else {
+        pushNotification("meeting_assigned", `تم توجيه اجتماع إليك تلقائياً: ${lead.company}`, [assignedTo]);
+        alert(`تم إنشاء الاجتماع وتحويل العميل بنجاح. تم توجيه الاجتماع تلقائياً إلى ${assignedTo}.`);
+      }
+    } else {
+      alert("تم إنشاء الاجتماع وتحويل العميل بنجاح.");
     }
-    
-    alert(assignedTo ? `تم إنشاء الاجتماع وتحويل العميل بنجاح. تم توجيه الاجتماع تلقائياً إلى ${assignedTo}.` : "تم إنشاء الاجتماع وتحويل العميل بنجاح.");
     closeMeetingDetailsModal();
     if (document.getElementById("meetingsTable")) {
       loadMeetingsTable();
