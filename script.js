@@ -4800,3 +4800,475 @@ async function updateAllReports() {
   `;
   tbody.appendChild(totalRow);
 }
+
+// === لوحة تحكم الأداء ===
+// متغيرات عامة للمخططات
+let funnelChart = null;
+let conversionByTypeChart = null;
+let contractDonutChart = null;
+
+async function calculateAndDisplayKPIs(monthFilter = "all") {
+  try {
+    const leads = await getLeads();
+    const meetings = await getMeetings();
+    
+    // فلترة البيانات حسب الشهر
+    let filteredLeads = leads;
+    let filteredMeetings = meetings;
+    
+    if (monthFilter !== "all") {
+      const [year, month] = monthFilter.split("-");
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+      
+      filteredLeads = leads.filter(lead => {
+        const leadDate = new Date(lead.createdAt);
+        return leadDate >= startDate && leadDate <= endDate;
+      });
+      
+      filteredMeetings = meetings.filter(meeting => {
+        const meetingDate = meeting.scheduledAt ? new Date(meeting.scheduledAt) : new Date(meeting.createdAt);
+        return meetingDate >= startDate && meetingDate <= endDate;
+      });
+    }
+    
+    // حساب KPIs
+    const kpis = calculateKPIs(filteredLeads, filteredMeetings);
+    
+    // حساب KPIs للشهر السابق (للمقارنة MoM)
+    let previousMonthKPIs = null;
+    if (monthFilter !== "all") {
+      const [year, month] = monthFilter.split("-");
+      const prevMonth = parseInt(month) - 1;
+      const prevYear = prevMonth === 0 ? parseInt(year) - 1 : parseInt(year);
+      const prevMonthStr = `${prevYear}-${String(prevMonth === 0 ? 12 : prevMonth).padStart(2, '0')}`;
+      
+      const prevStartDate = new Date(prevYear, prevMonth === 0 ? 11 : prevMonth - 1, 1);
+      const prevEndDate = new Date(prevYear, prevMonth === 0 ? 12 : prevMonth, 0, 23, 59, 59);
+      
+      const prevLeads = leads.filter(lead => {
+        const leadDate = new Date(lead.createdAt);
+        return leadDate >= prevStartDate && leadDate <= prevEndDate;
+      });
+      
+      const prevMeetings = meetings.filter(meeting => {
+        const meetingDate = meeting.scheduledAt ? new Date(meeting.scheduledAt) : new Date(meeting.createdAt);
+        return meetingDate >= prevStartDate && meetingDate <= prevEndDate;
+      });
+      
+      previousMonthKPIs = calculateKPIs(prevLeads, prevMeetings);
+    }
+    
+    // عرض KPIs
+    displayKPIs(kpis, previousMonthKPIs);
+    
+    // إنشاء المخططات
+    createFunnelChart(filteredLeads, filteredMeetings);
+    createConversionByTypeChart(filteredLeads, filteredMeetings);
+    createContractDonutChart(filteredMeetings);
+    
+    // إنشاء جدول KPIs الشهري
+    await createKPIMonthlyTable(monthFilter);
+    
+  } catch (error) {
+    console.error("Error calculating KPIs:", error);
+    alert("حدث خطأ أثناء حساب البيانات. يرجى المحاولة مرة أخرى.");
+  }
+}
+
+function calculateKPIs(leads, meetings) {
+  // KPI 1: إجمالي محاولات الاتصال (Leads where responseStatus is NOT 'لم يتم المحاوله')
+  const kpi1 = leads.filter(l => (l.responseStatus || "لم يتم المحاوله") !== "لم يتم المحاوله").length;
+  
+  // KPI 2: الأرقام الجديدة الواردة (Total new leads created)
+  const kpi2 = leads.length;
+  
+  // KPI 3: معدل الرد على المكالمات
+  const respondedLeads = leads.filter(l => l.responseStatus === "تم الرد").length;
+  const kpi3 = kpi1 > 0 ? ((respondedLeads / kpi1) * 100).toFixed(2) : 0;
+  
+  // KPI 4: معدل التحويل إلى الاجتماع (Leads that responded and have meetings)
+  const leadsWithMeetings = leads.filter(l => {
+    if (l.responseStatus !== "تم الرد") return false;
+    return meetings.some(m => m.leadId === l.id && m.scheduledAt);
+  }).length;
+  const kpi4 = respondedLeads > 0 ? ((leadsWithMeetings / respondedLeads) * 100).toFixed(2) : 0;
+  
+  // KPI 6: التعاقدات (العدد) - Meetings where conversion = 'funded'
+  const kpi6 = meetings.filter(m => m.conversion === "funded").length;
+  
+  // KPI 7: متوسط قيمة التعاقد
+  const fundedMeetings = meetings.filter(m => m.conversion === "funded");
+  const totalPrice = fundedMeetings.reduce((sum, m) => sum + (parseFloat(m.price) || 0), 0);
+  const kpi7 = kpi6 > 0 ? (totalPrice / kpi6).toFixed(2) : 0;
+  
+  // KPI 8: إجمالي الاجتماعات المجدولة
+  const kpi8 = meetings.filter(m => m.scheduledAt).length;
+  
+  // KPI 9: نسبة حضور الاجتماعات
+  const attendedMeetings = meetings.filter(m => m.status === "done").length;
+  const kpi9 = kpi8 > 0 ? ((attendedMeetings / kpi8) * 100).toFixed(2) : 0;
+  
+  // KPI 10: عملاء احتاجوا Second Meeting (Leads with more than one meeting)
+  const leadMeetingCounts = {};
+  meetings.forEach(m => {
+    if (m.leadId) {
+      leadMeetingCounts[m.leadId] = (leadMeetingCounts[m.leadId] || 0) + 1;
+    }
+  });
+  const kpi10 = Object.values(leadMeetingCounts).filter(count => count > 1).length;
+  
+  // KPI 11: نسبة الاجتماعات المنتهية (Meetings with status 'done' out of all meetings)
+  const totalMeetings = meetings.length;
+  const kpi11 = totalMeetings > 0 ? ((attendedMeetings / totalMeetings) * 100).toFixed(2) : 0;
+  
+  // KPI 12: متوسط عدد الاجتماعات قبل الإنهاء (Average meetings per lead before conversion)
+  const convertedLeads = leads.filter(l => l.status === "done" || meetings.some(m => m.leadId === l.id && m.conversion === "funded"));
+  const meetingsPerConvertedLead = convertedLeads.map(lead => {
+    const leadMeetings = meetings.filter(m => m.leadId === lead.id);
+    return leadMeetings.length;
+  });
+  const totalMeetingsForConverted = meetingsPerConvertedLead.reduce((sum, count) => sum + count, 0);
+  const kpi12 = convertedLeads.length > 0 ? (totalMeetingsForConverted / convertedLeads.length).toFixed(1) : 0;
+  
+  // KPI 13: إجمالي قيمة التعاقدات
+  const kpi13 = totalPrice.toFixed(2);
+  
+  return {
+    kpi1, kpi2, kpi3, kpi4, kpi6, kpi7, kpi8, kpi9, kpi10, kpi11, kpi12, kpi13,
+    totalLeads: leads.length,
+    respondedLeads,
+    scheduledMeetings: kpi8,
+    attendedMeetings,
+    fundedMeetings: kpi6,
+    totalPrice
+  };
+}
+
+function displayKPIs(kpis, previousKPIs = null) {
+  // KPI 1
+  document.getElementById("kpi1").textContent = kpis.kpi1.toLocaleString();
+  if (previousKPIs) {
+    const change = kpis.kpi1 - previousKPIs.kpi1;
+    const percentChange = previousKPIs.kpi1 > 0 ? ((change / previousKPIs.kpi1) * 100).toFixed(1) : 0;
+    const trendEl = document.getElementById("kpi1Trend");
+    trendEl.innerHTML = `
+      <span>MoM:</span>
+      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+      </span>
+    `;
+  }
+  
+  // KPI 6
+  document.getElementById("kpi6").textContent = kpis.kpi6.toLocaleString();
+  if (previousKPIs) {
+    const change = kpis.kpi6 - previousKPIs.kpi6;
+    const percentChange = previousKPIs.kpi6 > 0 ? ((change / previousKPIs.kpi6) * 100).toFixed(1) : 0;
+    const trendEl = document.getElementById("kpi6Trend");
+    trendEl.innerHTML = `
+      <span>MoM:</span>
+      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+      </span>
+    `;
+  }
+  
+  // KPI 13
+  document.getElementById("kpi13").textContent = `${parseFloat(kpis.kpi13).toLocaleString()} ر.س`;
+  if (previousKPIs) {
+    const change = parseFloat(kpis.kpi13) - parseFloat(previousKPIs.kpi13);
+    const percentChange = parseFloat(previousKPIs.kpi13) > 0 ? ((change / parseFloat(previousKPIs.kpi13)) * 100).toFixed(1) : 0;
+    const trendEl = document.getElementById("kpi13Trend");
+    trendEl.innerHTML = `
+      <span>MoM:</span>
+      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+      </span>
+    `;
+  }
+  
+  // KPI 7
+  document.getElementById("kpi7").textContent = `${parseFloat(kpis.kpi7).toLocaleString()} ر.س`;
+  if (previousKPIs) {
+    const change = parseFloat(kpis.kpi7) - parseFloat(previousKPIs.kpi7);
+    const percentChange = parseFloat(previousKPIs.kpi7) > 0 ? ((change / parseFloat(previousKPIs.kpi7)) * 100).toFixed(1) : 0;
+    const trendEl = document.getElementById("kpi7Trend");
+    trendEl.innerHTML = `
+      <span>MoM:</span>
+      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+      </span>
+    `;
+  }
+  
+  // KPI 3
+  document.getElementById("kpi3").textContent = `${kpis.kpi3}%`;
+  
+  // KPI 9
+  document.getElementById("kpi9").textContent = `${kpis.kpi9}%`;
+}
+
+function createFunnelChart(leads, meetings) {
+  const ctx = document.getElementById("funnelChart");
+  if (!ctx) return;
+  
+  // حساب المراحل
+  const totalLeads = leads.length;
+  const attemptedCalls = leads.filter(l => (l.responseStatus || "لم يتم المحاوله") !== "لم يتم المحاوله").length;
+  const respondedCalls = leads.filter(l => l.responseStatus === "تم الرد").length;
+  const scheduledMeetings = meetings.filter(m => m.scheduledAt).length;
+  const contracted = meetings.filter(m => m.conversion === "funded").length;
+  
+  // حساب معدلات التحويل
+  const conversion1 = attemptedCalls > 0 ? ((respondedCalls / attemptedCalls) * 100).toFixed(1) : 0;
+  const conversion2 = respondedCalls > 0 ? ((scheduledMeetings / respondedCalls) * 100).toFixed(1) : 0;
+  const conversion3 = scheduledMeetings > 0 ? ((contracted / scheduledMeetings) * 100).toFixed(1) : 0;
+  
+  if (funnelChart) {
+    funnelChart.destroy();
+  }
+  
+  funnelChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [
+        `كل الأرقام (${totalLeads})`,
+        `محاولات الاتصال (${attemptedCalls})`,
+        `رد على المكالمات (${respondedCalls})`,
+        `اجتماعات مجدولة (${scheduledMeetings})`,
+        `عملوا تعاقد (${contracted})`
+      ],
+      datasets: [{
+        label: 'العدد',
+        data: [totalLeads, attemptedCalls, respondedCalls, scheduledMeetings, contracted],
+        backgroundColor: [
+          'rgba(79, 70, 229, 0.8)',
+          'rgba(79, 70, 229, 0.7)',
+          'rgba(79, 70, 229, 0.6)',
+          'rgba(16, 185, 129, 0.7)',
+          'rgba(16, 185, 129, 0.9)'
+        ],
+        borderColor: [
+          'rgba(79, 70, 229, 1)',
+          'rgba(79, 70, 229, 1)',
+          'rgba(79, 70, 229, 1)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(16, 185, 129, 1)'
+        ],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(context) {
+              const index = context.dataIndex;
+              if (index === 1) return `معدل التحويل: ${conversion1}%`;
+              if (index === 2) return `معدل التحويل: ${conversion2}%`;
+              if (index === 3) return `معدل التحويل: ${conversion3}%`;
+              return '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          position: 'top'
+        }
+      }
+    }
+  });
+}
+
+function createConversionByTypeChart(leads, meetings) {
+  const ctx = document.getElementById("conversionByTypeChart");
+  if (!ctx) return;
+  
+  const types = ['hot', 'cold', 'hunt'];
+  const typeLabels = { 'hot': 'Hot', 'cold': 'Cold', 'hunt': 'Hunt' };
+  
+  const bookedData = [];
+  const failedData = [];
+  const conversionRates = [];
+  
+  types.forEach(type => {
+    const typeLeads = leads.filter(l => l.type === type);
+    const attempted = typeLeads.filter(l => (l.responseStatus || "لم يتم المحاوله") !== "لم يتم المحاوله");
+    
+    // اجتماعات محجوزة: Leads that responded AND have at least one meeting where status = 'done'
+    const respondedLeads = typeLeads.filter(l => l.responseStatus === "تم الرد");
+    const leadIds = respondedLeads.map(l => l.id);
+    const booked = leadIds.filter(leadId => {
+      return meetings.some(m => m.leadId === leadId && m.status === "done");
+    }).length;
+    
+    // فشل التأهيل: attempted but did not result in booked meeting
+    const failed = attempted.length - booked;
+    
+    bookedData.push(booked);
+    failedData.push(failed);
+    conversionRates.push(attempted.length > 0 ? ((booked / attempted.length) * 100).toFixed(1) : 0);
+  });
+  
+  if (conversionByTypeChart) {
+    conversionByTypeChart.destroy();
+  }
+  
+  conversionByTypeChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: types.map(t => typeLabels[t]),
+      datasets: [
+        {
+          label: 'اجتماع محجوز',
+          data: bookedData,
+          backgroundColor: 'rgba(16, 185, 129, 0.8)',
+          borderColor: 'rgba(16, 185, 129, 1)',
+          borderWidth: 2
+        },
+        {
+          label: 'فشل التأهيل/مفقود',
+          data: failedData,
+          backgroundColor: 'rgba(239, 68, 68, 0.8)',
+          borderColor: 'rgba(239, 68, 68, 1)',
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+        },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(context) {
+              const index = context.dataIndex;
+              return `نسبة التحويل: ${conversionRates[index]}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+function createContractDonutChart(meetings) {
+  const ctx = document.getElementById("contractDonutChart");
+  if (!ctx) return;
+  
+  // استبعاد الاجتماعات الملغاة
+  const relevantMeetings = meetings.filter(m => m.status !== "cancelled" && m.status !== "ملغى");
+  const contracted = relevantMeetings.filter(m => m.conversion === "funded").length;
+  const notContracted = relevantMeetings.filter(m => m.conversion !== "funded" || !m.conversion).length;
+  
+  const totalRelevant = relevantMeetings.length;
+  const conversionRate = totalRelevant > 0 ? ((contracted / totalRelevant) * 100).toFixed(1) : 0;
+  
+  // تحديث النصوص فوق المخطط
+  document.getElementById("conversionRate").textContent = `${conversionRate}%`;
+  document.getElementById("conversionRateValue").textContent = conversionRate;
+  document.getElementById("totalRelevantMeetings").textContent = totalRelevant;
+  document.getElementById("convertedMeetings").textContent = contracted;
+  
+  if (contractDonutChart) {
+    contractDonutChart.destroy();
+  }
+  
+  contractDonutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['تم التعاقد', 'غير متعاقد/قيد التفاوض'],
+      datasets: [{
+        data: [contracted, notContracted],
+        backgroundColor: [
+          'rgba(16, 185, 129, 0.8)',
+          'rgba(79, 70, 229, 0.8)'
+        ],
+        borderColor: [
+          'rgba(16, 185, 129, 1)',
+          'rgba(79, 70, 229, 1)'
+        ],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom'
+        }
+      }
+    }
+  });
+}
+
+async function createKPIMonthlyTable(selectedMonth = "all") {
+  const leads = await getLeads();
+  const meetings = await getMeetings();
+  
+  const months = [
+    { value: "2025-09", label: "سبتمبر 2025" },
+    { value: "2025-10", label: "أكتوبر 2025" },
+    { value: "2025-11", label: "نوفمبر 2025" }
+  ];
+  
+  const tbody = document.getElementById("kpiTableBody");
+  if (!tbody) return;
+  
+  tbody.innerHTML = "";
+  
+  months.forEach(month => {
+    const [year, monthNum] = month.value.split("-");
+    const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+    const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+    
+    const monthLeads = leads.filter(lead => {
+      const leadDate = new Date(lead.createdAt);
+      return leadDate >= startDate && leadDate <= endDate;
+    });
+    
+    const monthMeetings = meetings.filter(meeting => {
+      const meetingDate = meeting.scheduledAt ? new Date(meeting.scheduledAt) : new Date(meeting.createdAt);
+      return meetingDate >= startDate && meetingDate <= endDate;
+    });
+    
+    const kpis = calculateKPIs(monthLeads, monthMeetings);
+    
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="font-weight: 700; background: var(--surface-alt);">${month.label}</td>
+      <td>${kpis.kpi1.toLocaleString()}</td>
+      <td>${kpis.kpi2.toLocaleString()}</td>
+      <td>${kpis.kpi3}%</td>
+      <td>${kpis.kpi4}%</td>
+      <td>${kpis.kpi6.toLocaleString()}</td>
+      <td>${parseFloat(kpis.kpi7).toLocaleString()} ر.س</td>
+      <td>${kpis.kpi8.toLocaleString()}</td>
+      <td>${kpis.kpi9}%</td>
+      <td>${kpis.kpi10.toLocaleString()}</td>
+      <td>${kpis.kpi11}%</td>
+      <td>${kpis.kpi12}</td>
+      <td style="font-weight: 700; color: #27ae60;">${parseFloat(kpis.kpi13).toLocaleString()} ر.س</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
