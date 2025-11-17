@@ -1597,6 +1597,7 @@ async function showEditNotesModal(leadId) {
   
   document.getElementById("editNotesLeadId").value = leadId;
   document.getElementById("editNotesText").value = lead.notes || "";
+  document.getElementById("editDraftText").value = lead.draft || "";
   modal.style.display = "block";
 }
 
@@ -1606,6 +1607,7 @@ function closeNotesModal() {
     modal.style.display = "none";
     document.getElementById("editNotesLeadId").value = "";
     document.getElementById("editNotesText").value = "";
+    document.getElementById("editDraftText").value = "";
   }
 }
 
@@ -1613,6 +1615,7 @@ function closeNotesModal() {
 async function saveNotesFromModal() {
   const leadId = document.getElementById("editNotesLeadId").value;
   const notes = document.getElementById("editNotesText").value;
+  const draft = document.getElementById("editDraftText").value;
   
   if (!leadId) return;
   
@@ -1621,10 +1624,12 @@ async function saveNotesFromModal() {
   if (!lead) return;
   
   lead.notes = notes;
+  lead.draft = draft; // حفظ المسودة
   lead.updatedAt = new Date().toISOString();
   await setLeads(leads);
   
   // مزامنة الملاحظات مع الاجتماع المرتبط (إن وجد)
+  // ملاحظة: المسودة لا يتم مزامنتها مع الاجتماع
   const meetings = await getMeetings();
   const relatedMeeting = meetings.find(m => m.leadId === leadId);
   if (relatedMeeting) {
