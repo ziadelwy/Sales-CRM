@@ -2507,7 +2507,6 @@ function ensureMeetingsFiltersUI() {
     <select id="meetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
       <option value="">دخول الاجتماع</option>
       <option value="new">جديد</option>
-      <option value="in-progress">تحت التنفيذ</option>
       <option value="failed">فشل دخول الاجتماع</option>
       <option value="done">تم دخول الاجتماع</option>
     </select>
@@ -3120,7 +3119,7 @@ async function loadMeetingsTable() {
 
   // إظهار فقط الميتنجز الجديدة (غير مخصصة) للسيلز
   if (isSales) {
-    meetings = meetings.filter(m => m.status === "new" && !m.assignedTo);
+    meetings = meetings.filter(m => (m.status === "new" || m.status === "in-progress") && !m.assignedTo);
   }
 
   const typeFilter = document.getElementById("meetingsTypeFilter")?.value || "";
@@ -3135,7 +3134,8 @@ async function loadMeetingsTable() {
 
   meetings = meetings.filter(m => {
     const typeOk = !typeFilter || m.type === typeFilter;
-    const statusOk = !statusFilter || m.status === statusFilter;
+    // معالجة الفلترة: إذا كان statusFilter === "new"، يجب أن يتطابق مع "new" أو "in-progress"
+    const statusOk = !statusFilter || m.status === statusFilter || (statusFilter === "new" && m.status === "in-progress");
     const conversionValue = m.conversion || "unfunded";
     const conversionOk = !conversionFilter || conversionValue === conversionFilter;
     const meetingDate = (() => {
@@ -3189,7 +3189,7 @@ async function loadMeetingsTable() {
   const leads = await getLeads();
 
   meetings.forEach((m, i) => {
-    const canAssign = m.status === "new" && !m.assignedTo;
+    const canAssign = (m.status === "new" || m.status === "in-progress") && !m.assignedTo;
     const scheduledText = m.scheduledAt ? formatDateTime(m.scheduledAt) : "لم يتم تحديده";
     const row = document.createElement("tr");
     row.innerHTML = `
@@ -3199,12 +3199,12 @@ async function loadMeetingsTable() {
       <td>${m.type === "hunt meetings" ? "Hunt" : (m.type === "hot meetings" ? "Hot" : "Cold")}</td>
       <td>${scheduledText}</td>
       <td>
-        <span class="status ${m.status}">${getStatusText(m.status)}</span>
+        <span class="status ${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status)))}</span>
         ${(isManager || isAdmin) ? `
           <select onchange="updateMeetingStatus('${m.id}', this.value)" style="margin-top:0.35rem; width:100%;">
-            <option value="in-progress" ${m.status === 'in-progress' ? 'selected' : ''}>تحت التنفيذ</option>
-            <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل</option>
-            <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم</option>
+            <option value="new" ${m.status === 'new' || m.status === 'in-progress' ? 'selected' : ''}>جديد</option>
+            <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل دخول الاجتماع</option>
+            <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم دخول الاجتماع</option>
           </select>
         ` : ""}
       </td>
