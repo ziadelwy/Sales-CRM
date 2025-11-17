@@ -2580,7 +2580,6 @@ function ensureMyMeetingsFiltersUI() {
     <select id="myMeetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
       <option value="">كل حالات دخول الاجتماع</option>
       <option value="new">جديد</option>
-      <option value="in-progress">تحت التنفيذ</option>
       <option value="failed">فشل دخول الاجتماع</option>
       <option value="done">تم دخول الاجتماع</option>
     </select>
@@ -2898,8 +2897,8 @@ async function updateMeetingStatus(id, status) {
   
   // إذا تم إرجاع حالة دخول الاجتماع إلى "فشل دخول الاجتماع" أو "تحت التنفيذ"،
   // يتم إرجاع حالة التعاقد تلقائياً إلى "لم يتم التعاقد"
-  if ((status === "failed" || status === "in-progress") && previousStatus === "done") {
-    // إذا كانت الحالة السابقة "تم دخول الاجتماع" وتم تغييرها إلى "فشل" أو "تحت التنفيذ"
+  if ((status === "failed" || status === "new" || status === "in-progress") && previousStatus === "done") {
+    // إذا كانت الحالة السابقة "تم دخول الاجتماع" وتم تغييرها إلى "فشل" أو "جديد" أو "تحت التنفيذ"
     if (meeting.conversion === "funded") {
       meeting.conversion = "unfunded";
       meeting.price = ""; // إزالة السعر أيضاً
@@ -3284,7 +3283,8 @@ async function loadMyMeetingsTable() {
 
   meetings = meetings.filter(m => {
     const typeOk = !typeFilter || m.type === typeFilter;
-    const statusOk = !statusFilter || m.status === statusFilter;
+    // معالجة الفلترة: إذا كان statusFilter === "new"، يجب أن يتطابق مع "new" أو "in-progress"
+    const statusOk = !statusFilter || m.status === statusFilter || (statusFilter === "new" && m.status === "in-progress");
     const conversionValue = m.conversion || "unfunded";
     const conversionOk = !conversionFilter || conversionValue === conversionFilter;
     const meetingDate = (() => {
@@ -3332,9 +3332,9 @@ async function loadMyMeetingsTable() {
       <td>${m.type === "cold meetings" ? "Cold" : (m.type === "hot meetings" ? "Hot" : "Hunt")}</td>
       <td>${scheduledText}</td>
       <td>
-        <span class="status ${m.status}" data-status="${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' ? 'تحت التنفيذ' : getStatusText(m.status)))}</span>
+        <span class="status ${m.status}" data-status="${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status)))}</span>
         <select onchange="updateMeetingStatus('${m.id}', this.value)" ${isLocked && !canEditLocked ? 'disabled' : ''} style="margin-top:0.35rem; width:100%;">
-          <option value="in-progress" ${m.status === 'in-progress' ? 'selected' : ''}>تحت التنفيذ</option>
+          <option value="new" ${m.status === 'new' || m.status === 'in-progress' ? 'selected' : ''}>جديد</option>
           <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل دخول الاجتماع</option>
           <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم دخول الاجتماع</option>
         </select>
