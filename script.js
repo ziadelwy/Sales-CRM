@@ -2507,6 +2507,7 @@ function ensureMeetingsFiltersUI() {
     <select id="meetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
       <option value="">دخول الاجتماع</option>
       <option value="new">جديد</option>
+      <option value="follow-up">إعادة متابعة</option>
       <option value="failed">فشل دخول الاجتماع</option>
       <option value="done">تم دخول الاجتماع</option>
     </select>
@@ -2579,6 +2580,7 @@ function ensureMyMeetingsFiltersUI() {
     <select id="myMeetingsStatusFilter" style="min-width:160px; padding:0.4rem 0.5rem; border:1px solid #dfe3ea; border-radius:6px;">
       <option value="">كل حالات دخول الاجتماع</option>
       <option value="new">جديد</option>
+      <option value="follow-up">إعادة متابعة</option>
       <option value="failed">فشل دخول الاجتماع</option>
       <option value="done">تم دخول الاجتماع</option>
     </select>
@@ -2894,14 +2896,20 @@ async function updateMeetingStatus(id, status) {
   
   meeting.status = status;
   
-  // إذا تم إرجاع حالة دخول الاجتماع إلى "فشل دخول الاجتماع" أو "تحت التنفيذ"،
+  // إذا تم إرجاع حالة دخول الاجتماع إلى "فشل دخول الاجتماع" أو "جديد" أو "إعادة متابعة"،
   // يتم إرجاع حالة التعاقد تلقائياً إلى "لم يتم التعاقد"
-  if ((status === "failed" || status === "new" || status === "in-progress") && previousStatus === "done") {
-    // إذا كانت الحالة السابقة "تم دخول الاجتماع" وتم تغييرها إلى "فشل" أو "جديد" أو "تحت التنفيذ"
+  if ((status === "failed" || status === "new" || status === "in-progress" || status === "follow-up") && previousStatus === "done") {
+    // إذا كانت الحالة السابقة "تم دخول الاجتماع" وتم تغييرها إلى "فشل" أو "جديد" أو "إعادة متابعة"
     if (meeting.conversion === "funded") {
       meeting.conversion = "unfunded";
       meeting.price = ""; // إزالة السعر أيضاً
     }
+  }
+  
+  // إذا تم تغيير الحالة إلى "فشل" أو "تم"، تجميد قيمة المتابعة (followUp) على آخر قيمة مسجلة
+  if ((status === "failed" || status === "done") && (previousStatus === "new" || previousStatus === "in-progress" || previousStatus === "follow-up")) {
+    // الحالة الحالية للمتابعة تبقى كما هي (مجمدة)
+    // لا حاجة لتغييرها
   }
   
   await setMeetings(meetings);
@@ -2912,6 +2920,31 @@ async function updateMeetingStatus(id, status) {
   }
   
   // تحديث الجداول الأخرى
+  if (document.getElementById("meetingsTable")) {
+    loadMeetingsTable();
+  }
+}
+
+// تحديث نوع المتابعة
+async function updateFollowUp(meetingId, followUpType) {
+  const meetings = await getMeetings();
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) return;
+  
+  // التحقق من أن الحالة تسمح بالتعديل (new أو in-progress أو follow-up)
+  if (meeting.status !== "new" && meeting.status !== "in-progress" && meeting.status !== "follow-up") {
+    alert("لا يمكن تعديل نوع المتابعة إلا عندما تكون حالة الاجتماع 'جديد' أو 'إعادة متابعة'");
+    return;
+  }
+  
+  meeting.followUp = followUpType;
+  meeting.updatedAt = new Date().toISOString();
+  await setMeetings(meetings);
+  
+  // تحديث الجداول
+  if (document.getElementById("myMeetingsTable")) {
+    loadMyMeetingsTable();
+  }
   if (document.getElementById("meetingsTable")) {
     loadMeetingsTable();
   }
@@ -3119,7 +3152,7 @@ async function loadMeetingsTable() {
 
   // إظهار فقط الميتنجز الجديدة (غير مخصصة) للسيلز
   if (isSales) {
-    meetings = meetings.filter(m => (m.status === "new" || m.status === "in-progress") && !m.assignedTo);
+    meetings = meetings.filter(m => (m.status === "new" || m.status === "in-progress" || m.status === "follow-up") && !m.assignedTo);
   }
 
   const typeFilter = document.getElementById("meetingsTypeFilter")?.value || "";
@@ -3189,7 +3222,7 @@ async function loadMeetingsTable() {
   const leads = await getLeads();
 
   meetings.forEach((m, i) => {
-    const canAssign = (m.status === "new" || m.status === "in-progress") && !m.assignedTo;
+    const canAssign = (m.status === "new" || m.status === "in-progress" || m.status === "follow-up") && !m.assignedTo;
     const scheduledText = m.scheduledAt ? formatDateTime(m.scheduledAt) : "لم يتم تحديده";
     const row = document.createElement("tr");
     row.innerHTML = `
@@ -3199,14 +3232,29 @@ async function loadMeetingsTable() {
       <td>${m.type === "hunt meetings" ? "Hunt" : (m.type === "hot meetings" ? "Hot" : "Cold")}</td>
       <td>${scheduledText}</td>
       <td>
-        <span class="status ${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status)))}</span>
+        <span class="status ${m.status}" ${m.status === 'follow-up' ? 'style="color: #e67e22; font-weight: bold;"' : ''}>${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'follow-up' ? 'إعادة متابعة' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status))))}</span>
         ${(isManager || isAdmin) ? `
           <select onchange="updateMeetingStatus('${m.id}', this.value)" style="margin-top:0.35rem; width:100%;">
             <option value="new" ${m.status === 'new' || m.status === 'in-progress' ? 'selected' : ''}>جديد</option>
+            <option value="follow-up" ${m.status === 'follow-up' ? 'selected' : ''}>إعادة متابعة</option>
             <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل دخول الاجتماع</option>
             <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم دخول الاجتماع</option>
           </select>
         ` : ""}
+      </td>
+      <td>
+        ${(() => {
+          const canEditFollowUp = (m.status === "new" || m.status === "in-progress" || m.status === "follow-up");
+          const followUpValue = m.followUp || "";
+          return `
+            <select onchange="updateFollowUp('${m.id}', this.value)" ${canEditFollowUp ? '' : 'disabled'} style="width:100%; padding:0.4rem; border:1px solid #ddd; border-radius:4px;">
+              <option value="">-- اختر --</option>
+              <option value="call" ${followUpValue === 'call' ? 'selected' : ''}>Call</option>
+              <option value="whatsapp" ${followUpValue === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+            </select>
+            ${!canEditFollowUp && followUpValue ? `<small style="display:block; margin-top:0.35rem; color:#7f8c8d;">${followUpValue === 'call' ? 'Call' : 'WhatsApp'}</small>` : ""}
+          `;
+        })()}
       </td>
       <td>${m.assignedTo || "-"}</td>
       <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px;">
@@ -3332,13 +3380,28 @@ async function loadMyMeetingsTable() {
       <td>${m.type === "cold meetings" ? "Cold" : (m.type === "hot meetings" ? "Hot" : "Hunt")}</td>
       <td>${scheduledText}</td>
       <td>
-        <span class="status ${m.status}" data-status="${m.status}">${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status)))}</span>
+        <span class="status ${m.status}" data-status="${m.status}" ${m.status === 'follow-up' ? 'style="color: #e67e22; font-weight: bold;"' : ''}>${m.status === 'done' ? 'تم دخول الاجتماع' : (m.status === 'failed' ? 'فشل دخول الاجتماع' : (m.status === 'follow-up' ? 'إعادة متابعة' : (m.status === 'in-progress' || m.status === 'new' ? (m.status === 'new' ? 'جديد' : 'تحت التنفيذ') : getStatusText(m.status))))}</span>
         <select onchange="updateMeetingStatus('${m.id}', this.value)" ${isLocked && !canEditLocked ? 'disabled' : ''} style="margin-top:0.35rem; width:100%;">
           <option value="new" ${m.status === 'new' || m.status === 'in-progress' ? 'selected' : ''}>جديد</option>
+          <option value="follow-up" ${m.status === 'follow-up' ? 'selected' : ''}>إعادة متابعة</option>
           <option value="failed" ${m.status === 'failed' ? 'selected' : ''}>فشل دخول الاجتماع</option>
           <option value="done" ${m.status === 'done' ? 'selected' : ''}>تم دخول الاجتماع</option>
         </select>
         ${isLocked && !canEditLocked ? `<small style="display:block; margin-top:0.35rem; color:#e74c3c;">تم قفل الاجتماع - التعديل متاح فقط للمدير أو رئيس القسم</small>` : ""}
+      </td>
+      <td>
+        ${(() => {
+          const canEditFollowUp = (m.status === "new" || m.status === "in-progress" || m.status === "follow-up") && (!isLocked || canEditLocked);
+          const followUpValue = m.followUp || "";
+          return `
+            <select onchange="updateFollowUp('${m.id}', this.value)" ${canEditFollowUp ? '' : 'disabled'} style="width:100%; padding:0.4rem; border:1px solid #ddd; border-radius:4px;">
+              <option value="">-- اختر --</option>
+              <option value="call" ${followUpValue === 'call' ? 'selected' : ''}>Call</option>
+              <option value="whatsapp" ${followUpValue === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+            </select>
+            ${!canEditFollowUp && followUpValue ? `<small style="display:block; margin-top:0.35rem; color:#7f8c8d;">${followUpValue === 'call' ? 'Call' : 'WhatsApp'}</small>` : ""}
+          `;
+        })()}
       </td>
       <td class="conversion-cell">
         <select onchange="updateConversion('${m.id}', this.value)" ${canEditConversion ? '' : 'disabled'}>
