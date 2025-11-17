@@ -139,6 +139,15 @@
   </style>
 </head>
 <body>
+  <!-- صفحة التحميل -->
+  <div id="loadingPage">
+    <div class="loading-logo">
+      <img src="Callva logo Horizontal.png" alt="CallVa Logo">
+    </div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text">جاري تحميل التقارير...</div>
+  </div>
+
   <header>
     <div class="brand-logo">
       <img src="Callva logo Horizontal.png" alt="CallVa Logo">
@@ -163,7 +172,7 @@
     <button class="back-btn" onclick="window.location.href='users.html'">← العودة إلى إدارة المستخدمين</button>
     
     <div class="date-filter">
-      <h2>تقارير جميع المستخدمين</h2>
+      <h2>📊 تقارير جميع المستخدمين</h2>
       <div class="date-inputs">
         <label>من تاريخ:</label>
         <input type="date" id="startDate" />
@@ -174,19 +183,19 @@
 
     <!-- جدول شامل لجميع التقارير -->
     <div class="report-section">
-      <h3>التقارير الشاملة</h3>
+      <h3>📊 التقارير الشاملة لجميع المستخدمين</h3>
       
       <table class="stats-table" id="allReportsTable">
         <thead>
           <tr>
             <th rowspan="2">المستخدم</th>
-            <th colspan="4" class="leads-section">Cold Leads</th>
-            <th colspan="4" class="leads-section">Hot Leads</th>
-            <th colspan="4" class="leads-section">Hunt Leads</th>
+            <th colspan="5" class="leads-section">Cold Leads</th>
+            <th colspan="5" class="leads-section">Hot Leads</th>
+            <th colspan="5" class="leads-section">Hunt Leads</th>
             <th rowspan="2" class="leads-section">إجمالي Leads</th>
-            <th colspan="4" class="meetings-section">Cold Meetings</th>
-            <th colspan="4" class="meetings-section">Hot Meetings</th>
-            <th colspan="4" class="meetings-section">Hunt Meetings</th>
+            <th colspan="5" class="meetings-section">Cold Meetings</th>
+            <th colspan="5" class="meetings-section">Hot Meetings</th>
+            <th colspan="5" class="meetings-section">Hunt Meetings</th>
             <th rowspan="2" class="meetings-section">إجمالي Meetings</th>
             <th colspan="2" class="funded-section">Cold Funded</th>
             <th colspan="2" class="funded-section">Hot Funded</th>
@@ -197,32 +206,38 @@
             <!-- Cold Leads -->
             <th class="leads-section">إجمالي</th>
             <th class="leads-section">تم</th>
-            <th class="leads-section">تحت التنفيذ</th>
+            <th class="leads-section">جديد</th>
+            <th class="leads-section">إعادة متابعة</th>
             <th class="leads-section">فشل</th>
             <!-- Hot Leads -->
             <th class="leads-section">إجمالي</th>
             <th class="leads-section">تم</th>
-            <th class="leads-section">تحت التنفيذ</th>
+            <th class="leads-section">جديد</th>
+            <th class="leads-section">إعادة متابعة</th>
             <th class="leads-section">فشل</th>
             <!-- Hunt Leads -->
             <th class="leads-section">إجمالي</th>
             <th class="leads-section">تم</th>
-            <th class="leads-section">تحت التنفيذ</th>
+            <th class="leads-section">جديد</th>
+            <th class="leads-section">إعادة متابعة</th>
             <th class="leads-section">فشل</th>
             <!-- Cold Meetings -->
             <th class="meetings-section">إجمالي</th>
             <th class="meetings-section">تم</th>
-            <th class="meetings-section">تحت التنفيذ</th>
+            <th class="meetings-section">جديد</th>
+            <th class="meetings-section">إعادة متابعة</th>
             <th class="meetings-section">فشل</th>
             <!-- Hot Meetings -->
             <th class="meetings-section">إجمالي</th>
             <th class="meetings-section">تم</th>
-            <th class="meetings-section">تحت التنفيذ</th>
+            <th class="meetings-section">جديد</th>
+            <th class="meetings-section">إعادة متابعة</th>
             <th class="meetings-section">فشل</th>
             <!-- Hunt Meetings -->
             <th class="meetings-section">إجمالي</th>
             <th class="meetings-section">تم</th>
-            <th class="meetings-section">تحت التنفيذ</th>
+            <th class="meetings-section">جديد</th>
+            <th class="meetings-section">إعادة متابعة</th>
             <th class="meetings-section">فشل</th>
             <!-- Cold Funded -->
             <th class="funded-section">العدد</th>
@@ -245,6 +260,11 @@
     </div>
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
   <script src="script.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", loadAllReports);
