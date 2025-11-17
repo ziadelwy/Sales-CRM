@@ -1005,6 +1005,99 @@ function downloadExcelTemplate() {
   XLSX.writeFile(wb, "قالب_العملاء.xlsx");
 }
 
+// تصدير بيانات المستخدمين إلى Excel
+async function exportUsersToExcel() {
+  try {
+    // التحقق من الصلاحيات - فقط المدير
+    await loadCurrentUser();
+    if (!currentUser || currentUser.role !== "admin") {
+      alert("غير مصرح لك بتصدير بيانات المستخدمين. هذه الميزة متاحة فقط للمدير.");
+      return;
+    }
+    
+    // الحصول على جميع المستخدمين
+    const users = await getUsers();
+    
+    // تحضير البيانات للتصدير
+    const exportData = [];
+    
+    // إضافة العناوين
+    exportData.push([
+      'اسم المستخدم',
+      'الدور',
+      'رقم الهاتف',
+      'المدير المباشر',
+      'تاريخ الإنشاء',
+      'الحالة',
+      'الصلاحيات'
+    ]);
+    
+    // إضافة بيانات المستخدمين (باستثناء admin)
+    users.filter(user => user.username !== "admin").forEach(user => {
+      const permissions = user.permissions || [];
+      const permText = permissions.length > 0 
+        ? permissions.map(p => {
+            const names = {
+              "dashboard.html": "الرئيسية",
+              "leads.html": "جميع العملاء",
+              "my-leads.html": "عملائي",
+              "meetings.html": "جميع الاجتماعات",
+              "my-meetings.html": "اجتماعاتي",
+              "users.html": "المستخدمين",
+              "clear.html": "مسح البيانات"
+            };
+            return names[p] || p;
+          }).join(", ")
+        : "لا توجد صلاحيات";
+      
+      const managerName = user.manager 
+        ? (users.find(u => u.username === user.manager)?.username || user.manager)
+        : "-";
+      
+      const isActive = user.isActive !== false;
+      const status = isActive ? "مفعّل" : "معطل";
+      
+      exportData.push([
+        user.username,
+        getRoleText(user.role),
+        user.phone || "-",
+        managerName,
+        user.createdAt || "-",
+        status,
+        permText
+      ]);
+    });
+    
+    // إنشاء ورقة العمل
+    const ws = XLSX.utils.aoa_to_sheet(exportData);
+    
+    // تحديد عرض الأعمدة
+    const colWidths = [
+      { wch: 20 }, // اسم المستخدم
+      { wch: 15 }, // الدور
+      { wch: 15 }, // رقم الهاتف
+      { wch: 20 }, // المدير المباشر
+      { wch: 20 }, // تاريخ الإنشاء
+      { wch: 10 }, // الحالة
+      { wch: 50 }  // الصلاحيات
+    ];
+    ws['!cols'] = colWidths;
+    
+    // إنشاء المصنف
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "المستخدمين");
+    
+    // تحميل الملف
+    const fileName = `المستخدمين_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    
+    alert("تم تصدير بيانات المستخدمين بنجاح!");
+  } catch (error) {
+    console.error("Error exporting users to Excel:", error);
+    alert("حدث خطأ أثناء تصدير بيانات المستخدمين. يرجى المحاولة مرة أخرى.");
+  }
+}
+
 function importFromExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2315,6 +2408,12 @@ async function loadUsersTable() {
   // إظهار أزرار التقارير بعد تحميل البيانات
   if (allReportsBtn && (currentUser.role === "admin" || currentUser.role === "manager")) {
     allReportsBtn.style.display = "inline-block";
+  }
+  
+  // إظهار زر التصدير للمدير فقط
+  const exportUsersBtn = document.getElementById("exportUsersBtn");
+  if (exportUsersBtn && currentUser.role === "admin") {
+    exportUsersBtn.style.display = "inline-block";
   }
 }
 
