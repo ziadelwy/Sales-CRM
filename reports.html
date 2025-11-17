@@ -146,7 +146,7 @@
     <button class="back-btn" onclick="window.location.href='users.html'">← العودة إلى إدارة المستخدمين</button>
     
     <div class="date-filter">
-      <h2>تقارير المستخدم: <span id="reportUserName"></span></h2>
+      <h2>📊 تقارير المستخدم: <span id="reportUserName"></span></h2>
       <div class="date-inputs">
         <label>من تاريخ:</label>
         <input type="date" id="startDate" />
@@ -157,7 +157,7 @@
 
     <!-- تقارير Leads -->
     <div class="report-section">
-      <h3>تقارير العملاء (Leads)</h3>
+      <h3>📊 تقارير العملاء (Leads)</h3>
       
       <table class="stats-table">
         <thead>
@@ -165,9 +165,9 @@
             <th>النوع</th>
             <th>الإجمالي</th>
             <th>تم</th>
-            <th>تحت التنفيذ</th>
-            <th>فشل</th>
             <th>جديد</th>
+            <th>إعادة متابعة</th>
+            <th>فشل</th>
           </tr>
         </thead>
         <tbody>
@@ -175,25 +175,25 @@
             <td><strong>Cold Leads</strong></td>
             <td id="coldLeadsTotal">0</td>
             <td id="coldLeadsDone">0</td>
-            <td id="coldLeadsInProgress">0</td>
-            <td id="coldLeadsFailed">0</td>
             <td id="coldLeadsNew">0</td>
+            <td id="coldLeadsFollowUp">0</td>
+            <td id="coldLeadsFailed">0</td>
           </tr>
           <tr>
             <td><strong>Hot Leads</strong></td>
             <td id="hotLeadsTotal">0</td>
             <td id="hotLeadsDone">0</td>
-            <td id="hotLeadsInProgress">0</td>
-            <td id="hotLeadsFailed">0</td>
             <td id="hotLeadsNew">0</td>
+            <td id="hotLeadsFollowUp">0</td>
+            <td id="hotLeadsFailed">0</td>
           </tr>
           <tr>
             <td><strong>Hunt Leads</strong></td>
             <td id="huntLeadsTotal">0</td>
             <td id="huntLeadsDone">0</td>
-            <td id="huntLeadsInProgress">0</td>
-            <td id="huntLeadsFailed">0</td>
             <td id="huntLeadsNew">0</td>
+            <td id="huntLeadsFollowUp">0</td>
+            <td id="huntLeadsFailed">0</td>
           </tr>
           <tr class="total-row">
             <td><strong>إجمالي Leads</strong></td>
@@ -209,7 +209,7 @@
 
     <!-- تقارير Meetings -->
     <div class="report-section">
-      <h3>تقارير الاجتماعات (Meetings)</h3>
+      <h3>📈 تقارير الاجتماعات (Meetings)</h3>
       
       <table class="stats-table">
         <thead>
@@ -217,9 +217,9 @@
             <th>النوع</th>
             <th>الإجمالي</th>
             <th>تم</th>
-            <th>تحت التنفيذ</th>
-            <th>فشل</th>
             <th>جديد</th>
+            <th>إعادة متابعة</th>
+            <th>فشل</th>
           </tr>
         </thead>
         <tbody>
@@ -227,25 +227,25 @@
             <td><strong>Cold Meetings</strong></td>
             <td id="coldMeetingsTotal">0</td>
             <td id="coldMeetingsDone">0</td>
-            <td id="coldMeetingsInProgress">0</td>
-            <td id="coldMeetingsFailed">0</td>
             <td id="coldMeetingsNew">0</td>
+            <td id="coldMeetingsFollowUp">0</td>
+            <td id="coldMeetingsFailed">0</td>
           </tr>
           <tr>
             <td><strong>Hot Meetings</strong></td>
             <td id="hotMeetingsTotal">0</td>
             <td id="hotMeetingsDone">0</td>
-            <td id="hotMeetingsInProgress">0</td>
-            <td id="hotMeetingsFailed">0</td>
             <td id="hotMeetingsNew">0</td>
+            <td id="hotMeetingsFollowUp">0</td>
+            <td id="hotMeetingsFailed">0</td>
           </tr>
           <tr>
             <td><strong>Hunt Meetings</strong></td>
             <td id="huntMeetingsTotal">0</td>
             <td id="huntMeetingsDone">0</td>
-            <td id="huntMeetingsInProgress">0</td>
-            <td id="huntMeetingsFailed">0</td>
             <td id="huntMeetingsNew">0</td>
+            <td id="huntMeetingsFollowUp">0</td>
+            <td id="huntMeetingsFailed">0</td>
           </tr>
           <tr class="total-row">
             <td><strong>إجمالي Meetings</strong></td>
@@ -261,7 +261,7 @@
 
     <!-- تقارير Meetings الممولة -->
     <div class="report-section funded-section">
-      <h3>الاجتماعات الممولة (Funded Meetings)</h3>
+      <h3>💰 الاجتماعات الممولة (Funded Meetings)</h3>
       
       <table class="stats-table">
         <thead>
@@ -295,8 +295,60 @@
         </tbody>
       </table>
     </div>
+
+    <!-- تقارير الأداء والمعدلات -->
+    <div class="report-section" style="background: #fff9e6; border-left: 4px solid #f39c12;">
+      <h3>📈 تقارير الأداء والمعدلات</h3>
+      
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th>المؤشر</th>
+            <th>القيمة</th>
+            <th>التفاصيل</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>معدل تحويل العملاء إلى اجتماعات</strong></td>
+            <td id="conversionRate">0%</td>
+            <td id="conversionRateDetails">-</td>
+          </tr>
+          <tr>
+            <td><strong>معدل نجاح الاجتماعات</strong></td>
+            <td id="successRate">0%</td>
+            <td id="successRateDetails">-</td>
+          </tr>
+          <tr>
+            <td><strong>معدل التعاقد</strong></td>
+            <td id="fundingRate">0%</td>
+            <td id="fundingRateDetails">-</td>
+          </tr>
+          <tr>
+            <td><strong>متوسط قيمة التعاقد</strong></td>
+            <td id="avgFundingValue">0.00</td>
+            <td id="avgFundingValueDetails">-</td>
+          </tr>
+          <tr>
+            <td><strong>عدد الاجتماعات الناجحة</strong></td>
+            <td id="successfulMeetings">0</td>
+            <td id="successfulMeetingsDetails">-</td>
+          </tr>
+          <tr>
+            <td><strong>عدد الاجتماعات الفاشلة</strong></td>
+            <td id="failedMeetings">0</td>
+            <td id="failedMeetingsDetails">-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
   <script src="script.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", loadReports);
