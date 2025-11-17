@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>طلب تسجيل مستخدم جديد - CRM</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="Icon.png" type="image/png"/>
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <h1>طلب تسجيل مستخدم جديد</h1>
+    <form id="registerForm">
+      <input type="text" placeholder="اسم المستخدم" id="regUsername" required />
+      <input type="password" placeholder="كلمة المرور" id="regPassword" required />
+      
+      <select id="regRole" required>
+        <option value="">-- اختر الدور --</option>
+        <option value="sales">سيلز</option>
+        <option value="telesales">تلي سيلز</option>
+      </select>
+      
+      <select id="regManager" required style="display:none;">
+        <option value="">-- اختر المدير المباشر --</option>
+      </select>
+      
+      <div style="text-align: right; margin: 1rem 0;">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--text-dark);">الصلاحيات المطلوبة:</h3>
+        <div class="permissions-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="regPerm" value="leads.html" />
+            <span>جميع العملاء</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="regPerm" value="my-leads.html" />
+            <span>عملائي</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="regPerm" value="meetings.html" />
+            <span>جميع الاجتماعات</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="regPerm" value="my-meetings.html" />
+            <span>اجتماعاتي</span>
+          </label>
+        </div>
+      </div>
+      
+      <button type="submit">إرسال طلب التسجيل</button>
+    </form>
+    <p class="error" id="registerError"></p>
+    <p style="text-align: center; margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+      سيتم مراجعة طلبك من قبل المدير أو رئيس القسم وسيتم تفعيل حسابك قريباً
+    </p>
+    <p style="text-align: center; margin-top: 0.5rem;">
+      <a href="index.html" style="color: var(--brand-blue); text-decoration: none;">العودة إلى تسجيل الدخول</a>
+    </p>
+  </div>
+
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="firebase-db.js"></script>
+  <script src="script.js"></script>
+  <script>
+    // تحميل قائمة المديرين للتسجيل
+    async function loadManagersListForRegistration() {
+      try {
+        const users = await getUsers();
+        const managers = users.filter(u => u.role === "manager" || u.role === "admin");
+        const select = document.getElementById("regManager");
+        
+        if (!select) return;
+        
+        // مسح الخيارات القديمة
+        select.innerHTML = '<option value="">-- اختر المدير المباشر --</option>';
+        
+        // إضافة رؤساء الأقسام
+        managers.forEach(manager => {
+          const option = document.createElement("option");
+          option.value = manager.username;
+          const roleText = manager.role === "admin" ? "مدير" : "رئيس قسم";
+          option.textContent = `${manager.username} (${roleText})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading managers:', error);
+      }
+    }
+    
+    // تهيئة Firebase عند تحميل الصفحة
+    document.addEventListener("DOMContentLoaded", async function() {
+      if (typeof firebase !== 'undefined' && typeof database !== 'undefined') {
+        await initializeFirebase();
+        await loadManagersListForRegistration();
+        
+        // إظهار/إخفاء حقل المدير عند تغيير الدور
+        const roleSelect = document.getElementById("regRole");
+        if (roleSelect) {
+          roleSelect.addEventListener("change", function() {
+            const role = this.value;
+            const managerSelect = document.getElementById("regManager");
+            if (role === "sales" || role === "telesales") {
+              managerSelect.style.display = "block";
+              managerSelect.required = true;
+            } else {
+              managerSelect.style.display = "none";
+              managerSelect.required = false;
+              managerSelect.value = "";
+            }
+          });
+        }
+        
+        // معالجة نموذج التسجيل
+        const registerForm = document.getElementById("registerForm");
+        if (registerForm) {
+          registerForm.addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById("registerError");
+            errorDiv.textContent = "";
+            
+            const username = document.getElementById("regUsername").value.trim();
+            const password = document.getElementById("regPassword").value;
+            const role = document.getElementById("regRole").value;
+            const manager = document.getElementById("regManager").value;
+            
+            // التحقق من أن الدور هو سيلز أو تلي سيلز
+            if (role !== "sales" && role !== "telesales") {
+              errorDiv.textContent = "يجب اختيار دور سيلز أو تلي سيلز";
+              return;
+            }
+            
+            // التحقق من اختيار المدير
+            if (!manager) {
+              errorDiv.textContent = "يجب اختيار المدير المباشر";
+              return;
+            }
+            
+            // جمع الصلاحيات المحددة
+            const permissions = [];
+            document.querySelectorAll('input[name="regPerm"]:checked').forEach(checkbox => {
+              permissions.push(checkbox.value);
+            });
+            
+            // التحقق من اختيار صلاحية واحدة على الأقل
+            if (permissions.length === 0) {
+              errorDiv.textContent = "يجب اختيار صلاحية واحدة على الأقل";
+              return;
+            }
+            
+            try {
+              const users = await getUsers();
+              
+              // التحقق من عدم وجود مستخدم بنفس الاسم
+              if (users.find(u => u.username === username)) {
+                errorDiv.textContent = "اسم المستخدم موجود مسبقاً. يرجى اختيار اسم آخر";
+                return;
+              }
+              
+              // إنشاء المستخدم الجديد (غير مفعّل)
+              const newUser = {
+                id: Date.now().toString(),
+                username,
+                password,
+                role,
+                manager: manager || "",
+                permissions: permissions,
+                isActive: false, // الحساب غير مفعّل حتى يتم تفعيله من قبل المدير
+                createdAt: new Date().toLocaleString()
+              };
+              
+              users.push(newUser);
+              await setUsers(users);
+              
+              // إظهار رسالة نجاح
+              errorDiv.textContent = "";
+              alert("تم إرسال طلب التسجيل بنجاح! سيتم مراجعة طلبك من قبل المدير أو رئيس القسم وسيتم تفعيل حسابك قريباً.");
+              
+              // إعادة تعيين النموذج
+              registerForm.reset();
+              document.getElementById("regManager").style.display = "none";
+              document.querySelectorAll('input[name="regPerm"]').forEach(cb => cb.checked = false);
+              
+            } catch (error) {
+              console.error('Error registering user:', error);
+              errorDiv.textContent = "حدث خطأ أثناء إرسال الطلب. يرجى المحاولة مرة أخرى.";
+            }
+          });
+        }
+      }
+    });
+  </script>
+</body>
+</html>
+
