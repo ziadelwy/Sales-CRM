@@ -68,8 +68,11 @@
         <h2>تعديل الملاحظات</h2>
         <form id="editNotesForm">
           <input type="hidden" id="editNotesLeadId">
+          <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">الملاحظات:</label>
           <textarea id="editNotesText" rows="6" placeholder="اكتب الملاحظات..." style="width: 100%; padding: 0.75rem; margin: 0.5rem 0; border: 1px solid #ddd; border-radius: 5px; font-family: inherit; resize: vertical;"></textarea>
-          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <label style="display: block; margin-top: 1rem; margin-bottom: 0.5rem; font-weight: 600;">مسودة:</label>
+          <textarea id="editDraftText" rows="4" placeholder="ملاحظات عامة (مسودة)..." style="width: 100%; padding: 0.75rem; margin: 0.5rem 0; border: 1px solid #ddd; border-radius: 5px; font-family: inherit; resize: vertical; background-color: #f8f9fa;"></textarea>
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
             <button type="button" onclick="closeNotesModal()" style="background: #95a5a6;">إلغاء</button>
             <button type="submit" style="background: var(--brand-gradient);">حفظ</button>
           </div>
