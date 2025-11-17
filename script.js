@@ -4161,13 +4161,13 @@ async function calculateReports(username, startDate, endDate) {
   const hotLeads = userLeads.filter(l => l.type === "hot");
   const huntLeads = userLeads.filter(l => l.type === "hunt");
   
-  // حساب إحصائيات Leads حسب الحالة
+  // حساب إحصائيات Leads حسب حالة الرد (responseStatus)
   const getLeadStats = (leadsArray) => ({
     total: leadsArray.length,
-    done: leadsArray.filter(l => l.status === "done").length,
-    new: leadsArray.filter(l => l.status === "new" || l.status === "in-progress").length, // جديد يشمل new و in-progress
-    followUp: 0, // Leads لا تحتوي على follow-up
-    failed: leadsArray.filter(l => l.status === "failed").length
+    notAttempted: leadsArray.filter(l => (l.responseStatus || "لم يتم المحاوله") === "لم يتم المحاوله").length,
+    responded: leadsArray.filter(l => l.responseStatus === "تم الرد").length,
+    noResponse: leadsArray.filter(l => l.responseStatus === "لم يتم الرد").length,
+    reContact: leadsArray.filter(l => l.responseStatus === "اعاده التواصل").length
   });
   
   const coldLeadStats = getLeadStats(coldLeads);
@@ -4182,11 +4182,10 @@ async function calculateReports(username, startDate, endDate) {
   // حساب إحصائيات Meetings حسب الحالة
   const getMeetingStats = (meetingsArray) => ({
     total: meetingsArray.length,
-    done: meetingsArray.filter(m => m.status === "done").length,
-    inProgress: meetingsArray.filter(m => m.status === "in-progress").length,
-    failed: meetingsArray.filter(m => m.status === "failed").length,
     new: meetingsArray.filter(m => m.status === "new" || m.status === "in-progress").length, // جديد يشمل new و in-progress
-    followUp: meetingsArray.filter(m => m.status === "follow-up").length
+    followUp: meetingsArray.filter(m => m.status === "follow-up").length,
+    done: meetingsArray.filter(m => m.status === "done").length,
+    failed: meetingsArray.filter(m => m.status === "failed").length
   });
   
   const coldMeetingStats = getMeetingStats(coldMeetings);
@@ -4269,8 +4268,9 @@ async function loadReports() {
   const startDateInput = document.getElementById("startDate");
   const endDateInput = document.getElementById("endDate");
   
-  startDateInput.value = firstDay.toISOString().split('T')[0];
-  endDateInput.value = lastDay.toISOString().split('T')[0];
+  // استخدام formatDateForInput لتجنب مشاكل التوقيت
+  startDateInput.value = formatDateForInput(firstDay);
+  endDateInput.value = formatDateForInput(lastDay);
   
   // التحقق من وجود العناصر في الصفحة
   if (!startDateInput || !endDateInput) {
@@ -4327,22 +4327,22 @@ async function updateReports() {
     
     // الحصول على جميع العناصر
     const elements = {
-      // Leads elements
+      // Leads elements (حسب حالة الرد)
       coldLeadsTotal: getElement("coldLeadsTotal"),
-      coldLeadsDone: getElement("coldLeadsDone"),
-      coldLeadsNew: getElement("coldLeadsNew"),
-      coldLeadsFollowUp: getElement("coldLeadsFollowUp"),
-      coldLeadsFailed: getElement("coldLeadsFailed"),
+      coldLeadsNotAttempted: getElement("coldLeadsNotAttempted"),
+      coldLeadsResponded: getElement("coldLeadsResponded"),
+      coldLeadsNoResponse: getElement("coldLeadsNoResponse"),
+      coldLeadsReContact: getElement("coldLeadsReContact"),
       hotLeadsTotal: getElement("hotLeadsTotal"),
-      hotLeadsDone: getElement("hotLeadsDone"),
-      hotLeadsNew: getElement("hotLeadsNew"),
-      hotLeadsFollowUp: getElement("hotLeadsFollowUp"),
-      hotLeadsFailed: getElement("hotLeadsFailed"),
+      hotLeadsNotAttempted: getElement("hotLeadsNotAttempted"),
+      hotLeadsResponded: getElement("hotLeadsResponded"),
+      hotLeadsNoResponse: getElement("hotLeadsNoResponse"),
+      hotLeadsReContact: getElement("hotLeadsReContact"),
       huntLeadsTotal: getElement("huntLeadsTotal"),
-      huntLeadsDone: getElement("huntLeadsDone"),
-      huntLeadsNew: getElement("huntLeadsNew"),
-      huntLeadsFollowUp: getElement("huntLeadsFollowUp"),
-      huntLeadsFailed: getElement("huntLeadsFailed"),
+      huntLeadsNotAttempted: getElement("huntLeadsNotAttempted"),
+      huntLeadsResponded: getElement("huntLeadsResponded"),
+      huntLeadsNoResponse: getElement("huntLeadsNoResponse"),
+      huntLeadsReContact: getElement("huntLeadsReContact"),
       totalLeads: getElement("totalLeads"),
       // Meetings elements
       coldMeetingsTotal: getElement("coldMeetingsTotal"),
@@ -4385,24 +4385,24 @@ async function updateReports() {
       failedMeetingsDetails: getElement("failedMeetingsDetails")
     };
   
-  // عرض إحصائيات Leads
+  // عرض إحصائيات Leads (حسب حالة الرد)
   if (elements.coldLeadsTotal) elements.coldLeadsTotal.textContent = stats.coldLeads.total;
-  if (elements.coldLeadsDone) elements.coldLeadsDone.textContent = stats.coldLeads.done;
-  if (elements.coldLeadsNew) elements.coldLeadsNew.textContent = stats.coldLeads.new;
-  if (elements.coldLeadsFollowUp) elements.coldLeadsFollowUp.textContent = stats.coldLeads.followUp || 0;
-  if (elements.coldLeadsFailed) elements.coldLeadsFailed.textContent = stats.coldLeads.failed;
+  if (elements.coldLeadsNotAttempted) elements.coldLeadsNotAttempted.textContent = stats.coldLeads.notAttempted;
+  if (elements.coldLeadsResponded) elements.coldLeadsResponded.textContent = stats.coldLeads.responded;
+  if (elements.coldLeadsNoResponse) elements.coldLeadsNoResponse.textContent = stats.coldLeads.noResponse;
+  if (elements.coldLeadsReContact) elements.coldLeadsReContact.textContent = stats.coldLeads.reContact;
   
   if (elements.hotLeadsTotal) elements.hotLeadsTotal.textContent = stats.hotLeads.total;
-  if (elements.hotLeadsDone) elements.hotLeadsDone.textContent = stats.hotLeads.done;
-  if (elements.hotLeadsNew) elements.hotLeadsNew.textContent = stats.hotLeads.new;
-  if (elements.hotLeadsFollowUp) elements.hotLeadsFollowUp.textContent = stats.hotLeads.followUp || 0;
-  if (elements.hotLeadsFailed) elements.hotLeadsFailed.textContent = stats.hotLeads.failed;
+  if (elements.hotLeadsNotAttempted) elements.hotLeadsNotAttempted.textContent = stats.hotLeads.notAttempted;
+  if (elements.hotLeadsResponded) elements.hotLeadsResponded.textContent = stats.hotLeads.responded;
+  if (elements.hotLeadsNoResponse) elements.hotLeadsNoResponse.textContent = stats.hotLeads.noResponse;
+  if (elements.hotLeadsReContact) elements.hotLeadsReContact.textContent = stats.hotLeads.reContact;
   
   if (elements.huntLeadsTotal) elements.huntLeadsTotal.textContent = stats.huntLeads.total;
-  if (elements.huntLeadsDone) elements.huntLeadsDone.textContent = stats.huntLeads.done;
-  if (elements.huntLeadsNew) elements.huntLeadsNew.textContent = stats.huntLeads.new;
-  if (elements.huntLeadsFollowUp) elements.huntLeadsFollowUp.textContent = stats.huntLeads.followUp || 0;
-  if (elements.huntLeadsFailed) elements.huntLeadsFailed.textContent = stats.huntLeads.failed;
+  if (elements.huntLeadsNotAttempted) elements.huntLeadsNotAttempted.textContent = stats.huntLeads.notAttempted;
+  if (elements.huntLeadsResponded) elements.huntLeadsResponded.textContent = stats.huntLeads.responded;
+  if (elements.huntLeadsNoResponse) elements.huntLeadsNoResponse.textContent = stats.huntLeads.noResponse;
+  if (elements.huntLeadsReContact) elements.huntLeadsReContact.textContent = stats.huntLeads.reContact;
   
   if (elements.totalLeads) elements.totalLeads.textContent = stats.totalLeads;
   
@@ -4535,8 +4535,9 @@ async function loadAllReports() {
   const startDateInput = document.getElementById("startDate");
   const endDateInput = document.getElementById("endDate");
   
-  startDateInput.value = firstDay.toISOString().split('T')[0];
-  endDateInput.value = lastDay.toISOString().split('T')[0];
+  // استخدام formatDateForInput لتجنب مشاكل التوقيت
+  startDateInput.value = formatDateForInput(firstDay);
+  endDateInput.value = formatDateForInput(lastDay);
   
   // إخفاء صفحة التحميل
   const loadingPage = document.getElementById("loadingPage");
@@ -4588,35 +4589,35 @@ async function updateAllReports() {
     tr.innerHTML = `
       <td><strong>${username}</strong><br><small>${getRoleText(role)}</small></td>
       <td>${stats.coldLeads.total}</td>
-      <td>${stats.coldLeads.done}</td>
-      <td>${stats.coldLeads.new}</td>
-      <td>${stats.coldLeads.followUp || 0}</td>
-      <td>${stats.coldLeads.failed}</td>
+      <td>${stats.coldLeads.notAttempted}</td>
+      <td>${stats.coldLeads.responded}</td>
+      <td>${stats.coldLeads.noResponse}</td>
+      <td>${stats.coldLeads.reContact}</td>
       <td>${stats.hotLeads.total}</td>
-      <td>${stats.hotLeads.done}</td>
-      <td>${stats.hotLeads.new}</td>
-      <td>${stats.hotLeads.followUp || 0}</td>
-      <td>${stats.hotLeads.failed}</td>
+      <td>${stats.hotLeads.notAttempted}</td>
+      <td>${stats.hotLeads.responded}</td>
+      <td>${stats.hotLeads.noResponse}</td>
+      <td>${stats.hotLeads.reContact}</td>
       <td>${stats.huntLeads.total}</td>
-      <td>${stats.huntLeads.done}</td>
-      <td>${stats.huntLeads.new}</td>
-      <td>${stats.huntLeads.followUp || 0}</td>
-      <td>${stats.huntLeads.failed}</td>
+      <td>${stats.huntLeads.notAttempted}</td>
+      <td>${stats.huntLeads.responded}</td>
+      <td>${stats.huntLeads.noResponse}</td>
+      <td>${stats.huntLeads.reContact}</td>
       <td><strong>${stats.totalLeads}</strong></td>
       <td>${stats.coldMeetings.total}</td>
-      <td>${stats.coldMeetings.done}</td>
       <td>${stats.coldMeetings.new}</td>
       <td>${stats.coldMeetings.followUp || 0}</td>
+      <td>${stats.coldMeetings.done}</td>
       <td>${stats.coldMeetings.failed}</td>
       <td>${stats.hotMeetings.total}</td>
-      <td>${stats.hotMeetings.done}</td>
       <td>${stats.hotMeetings.new}</td>
       <td>${stats.hotMeetings.followUp || 0}</td>
+      <td>${stats.hotMeetings.done}</td>
       <td>${stats.hotMeetings.failed}</td>
       <td>${stats.huntMeetings.total}</td>
-      <td>${stats.huntMeetings.done}</td>
       <td>${stats.huntMeetings.new}</td>
       <td>${stats.huntMeetings.followUp || 0}</td>
+      <td>${stats.huntMeetings.done}</td>
       <td>${stats.huntMeetings.failed}</td>
       <td><strong>${stats.totalMeetings}</strong></td>
       <td>${stats.coldFunded.count}</td>
