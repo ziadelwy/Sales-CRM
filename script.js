@@ -1110,7 +1110,7 @@ async function loadLeadsTable() {
       <td>${formatDateTime(lead.createdAt)}</td>
       <td>${escapeHtml(lead.company)}</td>
       <td>${formatPhoneWithIcons(lead.phone)}</td>
-      <td>${lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">رابط</a>` : "-"}</td>
+      <td>${lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">link</a>` : "-"}</td>
       <td>${getTypeText(lead.type)}</td>
       <td><span class="status">${getResponseStatusText(lead.responseStatus)}</span></td>
       <td><span class="status ${lead.status}">${getStatusText(lead.status)}</span></td>
@@ -2964,7 +2964,7 @@ async function loadMyLeadsTable() {
       <td>${formatDateTime(lead.createdAt)}</td>
       <td>${escapeHtml(lead.company)}</td>
       <td>${formatPhoneWithIcons(lead.phone)}</td>
-      <td>${lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">رابط</a>` : "-"}</td>
+      <td>${lead.storeLink && lead.storeLink !== "-" ? `<a href="${lead.storeLink}" target="_blank">link</a>` : "-"}</td>
       <td>${getTypeText(lead.type)}</td>
       <td>
         <span class="status" style="${getResponseStatusStyle(lead.responseStatus)}">${getResponseStatusText(lead.responseStatus)}</span>
@@ -2984,8 +2984,11 @@ async function loadMyLeadsTable() {
         </select>
       </td>
       <td class="notes-cell">
-        <span class="notes-display" title="${escapeHtml(lead.notes || '')}" style="cursor: help;">${escapeHtml(lead.notes.substring(0, 30))}${lead.notes.length > 30 ? "..." : ""}</span>
+        <span class="notes-display" title="${escapeHtml(lead.notes || '')}" style="cursor: help;">${lead.notes ? escapeHtml(lead.notes.substring(0, 30)) + (lead.notes.length > 30 ? "..." : "") : "-"}</span>
         <button onclick="showEditNotesModal('${lead.id}')" class="small">عرض</button>
+      </td>
+      <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px; cursor: help;" title="${lead.draft ? escapeHtml(lead.draft) : '-'}">
+        ${lead.draft ? escapeHtml(lead.draft.substring(0, 100)) + (lead.draft.length > 100 ? "..." : "") : "-"}
       </td>
       <td class="notes-cell" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; max-width: 200px;">
         ${meetingNotesDisplay}
