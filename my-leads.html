@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="Permissions-Policy" content="unload=*">
   <title>عملائي</title>
   <link rel="stylesheet" href="style.css"/>
   <link rel="icon" href="Icon.png" type="image/png"/>
@@ -100,17 +101,9 @@
     </table>
   </main>
 
-  <script src="script.js"></script>
-  <script>
-    document.addEventListener("DOMContentLoaded", async function() {
-      await initMyLeads();
-      // إخفاء "الرئيسية" عن السيلز وتلي سيلز
-      if (currentUser && (currentUser.role === "sales" || currentUser.role === "telesales")) {
-        const dashboardLink = document.getElementById("dashboardLink");
-        if (dashboardLink) dashboardLink.style.display = "none";
-      }
-    });
-  </script>
+  <!-- Google API Client Library (يجب تحميله أولاً) -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   
   <!-- Firebase SDK v8 -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -120,5 +113,31 @@
   <script src="firebase-config.js"></script>
   <script src="firebase-db.js"></script>
   <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function() {
+      await initMyLeads();
+      // إخفاء "الرئيسية" عن السيلز وتلي سيلز
+      if (currentUser && (currentUser.role === "sales" || currentUser.role === "telesales")) {
+        const dashboardLink = document.getElementById("dashboardLink");
+        if (dashboardLink) dashboardLink.style.display = "none";
+      }
+      
+      // تهيئة Google API بعد تحميل الصفحة
+      // الانتظار قليلاً للتأكد من تحميل Google API
+      setTimeout(async () => {
+        if (typeof gapi !== 'undefined') {
+          await initGoogleAPI();
+        } else {
+          console.warn('Google API not loaded yet, will retry...');
+          // إعادة المحاولة بعد ثانية
+          setTimeout(async () => {
+            if (typeof gapi !== 'undefined') {
+              await initGoogleAPI();
+            }
+          }, 1000);
+        }
+      }, 500);
+    });
+  </script>
 </body>
 </html>
