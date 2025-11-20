@@ -196,15 +196,21 @@ button:hover {
   width: 100%;
   height: 100%;
   background-color: rgba(0,0,0,0.5);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-content {
   background-color: white;
-  margin: 10% auto;
+  margin: 5% auto;
   padding: 2rem;
   border-radius: 10px;
   width: 90%;
   max-width: 500px;
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .close {
@@ -703,4 +709,305 @@ header h1 {
   height: 50px;
   width: auto;
   filter: brightness(0) invert(1);
+}
+
+/* ============================================
+   Responsive Design - Media Queries
+   ============================================ */
+
+/* Large screens (desktops) - default styles apply */
+
+/* Medium screens (tablets) */
+@media screen and (max-width: 1024px) {
+  main {
+    padding: 1.5rem;
+  }
+  
+  .stats {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  
+  .stat-card {
+    min-width: 180px;
+  }
+  
+  table {
+    font-size: 0.9rem;
+  }
+  
+  th, td {
+    padding: 0.75rem 0.5rem;
+  }
+  
+  .navbar a {
+    margin: 0 0.5rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.9rem;
+  }
+  
+  header h1 {
+    font-size: 1.3rem;
+  }
+  
+  .brand-logo img {
+    height: 28px;
+  }
+  
+  .user-info {
+    font-size: 0.85rem;
+  }
+  
+  .user-info button {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* Small screens (mobile phones) */
+@media screen and (max-width: 768px) {
+  /* Header adjustments */
+  header {
+    padding: 0.75rem;
+  }
+  
+  header h1 {
+    font-size: 1.1rem;
+    margin: 0.5rem 0;
+  }
+  
+  .brand-logo {
+    position: relative;
+    right: auto;
+    top: auto;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .brand-logo img {
+    height: 24px;
+  }
+  
+  .user-info {
+    position: relative;
+    left: auto;
+    top: auto;
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+  
+  .user-info button {
+    margin-right: 0;
+    margin-top: 0.5rem;
+  }
+  
+  /* Navigation adjustments */
+  .navbar {
+    padding: 0.75rem 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .navbar a {
+    margin: 0 0.3rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  
+  /* Main content */
+  main {
+    padding: 1rem;
+  }
+  
+  h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+  }
+  
+  /* Stats cards */
+  .stats {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .stat-card {
+    min-width: 100%;
+  }
+  
+  /* Tables - make scrollable */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.8rem;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+  
+  tbody {
+    display: table-row-group;
+  }
+  
+  tr {
+    display: table-row;
+  }
+  
+  th, td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  
+  /* Buttons */
+  .add-btn {
+    width: 100%;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    margin: 0.25rem 0.15rem;
+  }
+  
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    margin: 5% auto;
+    padding: 1.5rem;
+  }
+  
+  form input, 
+  form select, 
+  form textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Filter sections */
+  #leadsFilters,
+  #myLeadsFilters,
+  #meetingsFilters,
+  #myMeetingsFilters {
+    padding: 0.75rem;
+    flex-wrap: wrap;
+  }
+  
+  #leadsFilters > *,
+  #myLeadsFilters > *,
+  #meetingsFilters > *,
+  #myMeetingsFilters > * {
+    margin: 0.25rem;
+    font-size: 0.85rem;
+  }
+  
+  /* Actions menu */
+  .actions-menu-dropdown {
+    position: fixed;
+    right: 1rem;
+    left: 1rem;
+    width: auto;
+    max-width: calc(100% - 2rem);
+  }
+  
+  /* Notes cells */
+  .notes-cell {
+    max-width: 150px;
+    font-size: 0.75rem;
+  }
+  
+  /* Login page */
+  .login-container {
+    width: 90%;
+    max-width: 90%;
+    padding: 1.5rem;
+  }
+  
+  /* Dashboard stats */
+  .dashboard .stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Extra small screens */
+@media screen and (max-width: 480px) {
+  header h1 {
+    font-size: 1rem;
+  }
+  
+  .navbar a {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
+  }
+  
+  th, td {
+    padding: 0.4rem 0.3rem;
+    font-size: 0.75rem;
+  }
+  
+  .modal-content {
+    padding: 1rem;
+  }
+  
+  h2 {
+    font-size: 1.1rem;
+  }
+  
+  .add-btn {
+    font-size: 0.85rem;
+    padding: 0.6rem;
+  }
+  
+  button {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.6rem;
+  }
+  
+  /* Hide less important columns on very small screens */
+  .notes-cell {
+    display: none;
+  }
+}
+
+/* Landscape orientation on mobile */
+@media screen and (max-width: 768px) and (orientation: landscape) {
+  header {
+    padding: 0.5rem;
+  }
+  
+  header h1 {
+    font-size: 1rem;
+    margin: 0.25rem 0;
+  }
+  
+  .navbar {
+    padding: 0.5rem;
+  }
+  
+  main {
+    padding: 0.75rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  header,
+  .navbar,
+  .add-btn,
+  button,
+  .actions-menu-dropdown {
+    display: none;
+  }
+  
+  main {
+    padding: 0;
+  }
+  
+  table {
+    box-shadow: none;
+  }
 }
