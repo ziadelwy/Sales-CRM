@@ -1,5 +1,156 @@
 let currentUser = null;
 let firebaseInitialized = false;
+let googleAPILoaded = false;
+let googleAPIClientId = '485825680289-gk0ajamk1j60q1qg1da9806o1gdhb2mt.apps.googleusercontent.com';
+let googleAPIKey = 'AIzaSyBoQvjpuYK0uSDuSnxGhGBw0o5amm1n4zQ'; // يجب إضافة Google Calendar API Key هنا
+let googleTokenClient = null;
+
+// تهيئة Google API
+async function initGoogleAPI() {
+  if (googleAPILoaded) return true;
+  
+  try {
+    // الانتظار حتى يتم تحميل gapi
+    let retries = 0;
+    while (typeof gapi === 'undefined' && retries < 20) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      retries++;
+    }
+    
+    if (typeof gapi === 'undefined') {
+      throw new Error('Google API library not loaded');
+    }
+    
+    // تحميل Google API Client (بدون auth2 - سنستخدم Google Identity Services)
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout loading Google API'));
+      }, 15000);
+      
+      gapi.load('client', {
+        callback: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        onerror: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+    });
+    
+    // تهيئة Google API Client
+    // ملاحظة: تحتاج إلى API Key منفصل لـ Google Calendar API
+    // اذهب إلى: https://console.cloud.google.com/apis/credentials
+    // أنشئ API Key جديد وافتحه لـ Google Calendar API
+    const apiKey = googleAPIKey || firebaseConfig.apiKey; // استخدام API Key منفصل إذا كان متاحاً
+    
+    await gapi.client.init({
+      apiKey: apiKey,
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest']
+    });
+    
+    // تهيئة Google Identity Services (GIS) - الطريقة الجديدة
+    // الانتظار حتى يتم تحميل Google Identity Services
+    let gisRetries = 0;
+    while (typeof google === 'undefined' && gisRetries < 10) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      gisRetries++;
+    }
+    
+    if (typeof google !== 'undefined' && google.accounts) {
+      try {
+        googleTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: googleAPIClientId,
+          scope: 'https://www.googleapis.com/auth/calendar.events',
+          callback: (tokenResponse) => {
+            console.log('Token received:', tokenResponse);
+          }
+        });
+        console.log('Google Identity Services initialized');
+      } catch (gisError) {
+        console.warn('Google Identity Services initialization warning:', gisError);
+        // لا نرمي خطأ هنا لأن GIS قد لا يكون ضرورياً للعمل الأساسي
+      }
+    } else {
+      console.warn('Google Identity Services not available yet, will retry when needed');
+    }
+    
+    googleAPILoaded = true;
+    console.log('Google API initialized successfully');
+    return true;
+  } catch (error) {
+    console.warn('Google API initialization failed:', error);
+    googleAPILoaded = false;
+    return false;
+  }
+}
+
+// دالة لتسجيل الدخول إلى Google باستخدام Google Identity Services (GIS)
+async function signInToGoogle() {
+  try {
+    if (!googleAPILoaded) {
+      const initialized = await initGoogleAPI();
+      if (!initialized) {
+        throw new Error('Failed to initialize Google API');
+      }
+    }
+    
+    // التأكد من تهيئة Google Identity Services إذا لم يتم تهيئتها
+    if (!googleTokenClient) {
+      // الانتظار قليلاً للتأكد من تحميل Google Identity Services
+      let gisRetries = 0;
+      while (typeof google === 'undefined' && gisRetries < 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        gisRetries++;
+      }
+      
+      if (typeof google !== 'undefined' && google.accounts) {
+        googleTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: googleAPIClientId,
+          scope: 'https://www.googleapis.com/auth/calendar.events',
+          callback: (tokenResponse) => {
+            console.log('Token received:', tokenResponse);
+          }
+        });
+      }
+    }
+    
+    // استخدام Google Identity Services (GIS) الجديد
+    if (typeof google !== 'undefined' && google.accounts && googleTokenClient) {
+      return new Promise((resolve, reject) => {
+        // التحقق من وجود token صالح
+        const token = gapi.client.getToken();
+        if (token && token.expires_at && token.expires_at > Date.now()) {
+          console.log('Already have valid token');
+          resolve(token);
+          return;
+        }
+        
+        // طلب token جديد
+        googleTokenClient.callback = (tokenResponse) => {
+          if (tokenResponse.error) {
+            console.error('Token error:', tokenResponse.error);
+            reject(new Error(tokenResponse.error));
+            return;
+          }
+          
+          // تعيين token للـ API client
+          gapi.client.setToken(tokenResponse);
+          console.log('Signed in to Google successfully');
+          resolve(tokenResponse);
+        };
+        
+        googleTokenClient.requestAccessToken({ prompt: 'consent' });
+      });
+    } else {
+      throw new Error('Google Identity Services not available. Please refresh the page and try again.');
+    }
+  } catch (error) {
+    console.error('Error signing in to Google:', error);
+    throw error;
+  }
+}
 
 // تهيئة Firebase والبيانات
 async function initializeFirebase() {
@@ -276,6 +427,7 @@ async function loadCurrentUser() {
     "my-leads.html": "عملائي",
     "meetings.html": "جميع الاجتماعات",
     "my-meetings.html": "اجتماعاتي",
+    "performance-dashboard.html": "لوحة الأداء",
     "clear.html": "مسح البيانات"
   };
   
@@ -2207,9 +2359,13 @@ async function showEditUserModal() {
   document.getElementById("editPassword").value = "";
   document.getElementById("editPhone").value = user.phone || "";
   
-  // تحميل قائمة رؤساء الأقسام وتعيين القيمة
-  loadManagersList("editManager");
-  document.getElementById("editManager").value = user.manager || "";
+  // تحميل قائمة رؤساء الأقسام وتعيين القيمة (باستخدام await)
+  await loadManagersList("editManager");
+  // تعيين القيمة بعد تحميل القائمة
+  const managerSelect = document.getElementById("editManager");
+  if (managerSelect && user.manager) {
+    managerSelect.value = user.manager;
+  }
   
   // إظهار/إخفاء حقل المدير المباشر حسب الدور
   updateManagerFieldVisibility("editRole", "editManager");
@@ -2275,9 +2431,13 @@ async function editUserModal(username) {
   document.getElementById("editPassword").value = "";
   document.getElementById("editPhone").value = user.phone || "";
   
-  // تحميل قائمة رؤساء الأقسام وتعيين القيمة
-  loadManagersList("editManager");
-  document.getElementById("editManager").value = user.manager || "";
+  // تحميل قائمة رؤساء الأقسام وتعيين القيمة (باستخدام await)
+  await loadManagersList("editManager");
+  // تعيين القيمة بعد تحميل القائمة
+  const managerSelect = document.getElementById("editManager");
+  if (managerSelect && user.manager) {
+    managerSelect.value = user.manager;
+  }
   
   // إظهار/إخفاء حقل المدير المباشر حسب الدور
   updateManagerFieldVisibility("editRole", "editManager");
@@ -2372,6 +2532,7 @@ async function loadUsersTable() {
             "meetings.html": "جميع الاجتماعات",
             "my-meetings.html": "اجتماعاتي",
             "users.html": "المستخدمين",
+            "performance-dashboard.html": "لوحة الأداء",
             "clear.html": "مسح البيانات"
           };
           return names[p] || p;
@@ -2915,6 +3076,9 @@ async function startMeetingConversion(leadId) {
     assignToSelfCheckbox.checked = false; // افتراضياً غير محدد
   }
   
+  // إعداد إنشاء رابط الاجتماع تلقائياً
+  setupMeetingLinkAutoGeneration();
+  
   modal.style.display = "block";
 }
 
@@ -3374,6 +3538,10 @@ async function loadMeetingsTable() {
       <td>
         ${(() => {
           const buttons = [];
+          // إضافة زر فتح رابط الاجتماع إذا كان موجوداً
+          if (m.meetingLink && m.meetingLink.trim() !== "") {
+            buttons.push({html: `<button onclick="window.open('${escapeHtml(m.meetingLink)}', '_blank'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));" style="background:#1a73e8; color:#fff;">دخول الاجتماع</button>`});
+          }
           buttons.push({html: `<button onclick="(async () => { await viewMeetingDetails('${m.id}'); })(); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
           if (isManager || isAdmin) {
             buttons.push({html: `<button onclick="openMeetingDetailsForEdit('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تعديل الاجتماع</button>`});
@@ -3521,6 +3689,10 @@ async function loadMyMeetingsTable() {
       <td>
         ${(() => {
           const buttons = [];
+          // إضافة زر فتح رابط الاجتماع إذا كان موجوداً
+          if (m.meetingLink && m.meetingLink.trim() !== "") {
+            buttons.push({html: `<button onclick="window.open('${escapeHtml(m.meetingLink)}', '_blank'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));" style="background:#1a73e8; color:#fff;">دخول الاجتماع</button>`});
+          }
           buttons.push({html: `<button onclick="${isLocked && !canEditLocked ? 'viewMeetingDetailsLocked' : 'openMeetingDetailsForMyMeeting'}('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تفاصيل الاجتماع</button>`});
           if (m.status === 'failed') {
             buttons.push({html: `<button onclick="registerNewMeetingFromFailed('${m.id}'); document.querySelectorAll('.actions-menu-dropdown.show').forEach(menu => menu.classList.remove('show'));">تسجيل اجتماع جديد</button>`});
@@ -3554,7 +3726,11 @@ function ensureMeetingDetailsModal() {
         <label style="display:block; margin-bottom:0.35rem;">وقت الاجتماع</label>
         <input type="time" id="meetingTimeInput" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
         <label style="display:block; margin-bottom:0.35rem;">رابط الاجتماع</label>
-        <input type="url" id="meetingLinkInput" placeholder="https://example.com" style="width:100%; padding:0.5rem; margin-bottom:0.75rem; border-radius:6px; border:1px solid #ccc;">
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem;">
+          <input type="url" id="meetingLinkInput" placeholder="https://meet.google.com/xxx-yyyy-zzz" style="flex:1; padding:0.5rem; border-radius:6px; border:1px solid #ccc;">
+          <button type="button" id="createMeetingLinkBtn" onclick="createNewMeetingLink()" style="background:#1a73e8; color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer; white-space:nowrap; font-size:0.9rem;">إنشاء اجتماع جديد</button>
+        </div>
+        <p style="font-size:0.85rem; color:#666; margin:-0.5rem 0 0.75rem 0; line-height:1.4;">انقر على "إنشاء اجتماع جديد" لفتح Google Meet</p>
         <div id="assignToSelfContainer" style="display:none; margin-bottom:1rem; padding:0.75rem; background:#f8f9fa; border-radius:6px; border:1px solid #dee2e6;">
           <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
             <input type="checkbox" id="assignToSelfCheckbox" />
@@ -3591,6 +3767,245 @@ function ensureMeetingDetailsModal() {
     </div>
   `;
   document.body.appendChild(modal);
+  
+  // إضافة مستمعي الأحداث لإنشاء رابط الاجتماع تلقائياً
+  setupMeetingLinkAutoGeneration();
+}
+
+// دالة لإنشاء رابط Google Meet تلقائياً باستخدام Google Calendar API
+async function createNewMeetingLink() {
+  const dateInput = document.getElementById("meetingDateInput");
+  const timeInput = document.getElementById("meetingTimeInput");
+  const linkInput = document.getElementById("meetingLinkInput");
+  const titleElement = document.getElementById("meetingDetailsTitle");
+  
+  // التحقق من وجود التاريخ والوقت
+  if (!dateInput || !timeInput || !linkInput) {
+    alert('يرجى التأكد من وجود حقول التاريخ والوقت');
+    return;
+  }
+  
+  const date = dateInput.value;
+  const time = timeInput.value;
+  
+  if (!date || !time) {
+    alert('يرجى تحديد تاريخ ووقت الاجتماع أولاً');
+    dateInput.focus();
+    return;
+  }
+  
+  // الحصول على اسم الشركة من العنوان
+  let companyName = "اجتماع";
+  if (titleElement && titleElement.textContent) {
+    const match = titleElement.textContent.match(/تفاصيل الاجتماع - (.+)/);
+    if (match) {
+      companyName = match[1];
+    }
+  }
+  
+  // إظهار رسالة تحميل
+  const originalBtn = document.getElementById("createMeetingLinkBtn");
+  const originalText = originalBtn ? originalBtn.textContent : "إنشاء اجتماع جديد";
+  if (originalBtn) {
+    originalBtn.disabled = true;
+    originalBtn.textContent = "جاري الإنشاء...";
+  }
+  
+  try {
+    // محاولة تهيئة Google API أولاً
+    const apiInitialized = await initGoogleAPI();
+    
+    if (apiInitialized && typeof gapi !== 'undefined' && gapi.client) {
+      try {
+        // التحقق من تسجيل الدخول
+        console.log('Requesting Google sign-in...');
+        await signInToGoogle();
+        
+        // إنشاء رابط Google Meet باستخدام Google Calendar API
+        console.log('Generating Google Meet link...');
+        const meetingLink = await generateGoogleMeetLink(date, time, companyName);
+        
+        if (meetingLink) {
+          linkInput.value = meetingLink;
+          linkInput.style.backgroundColor = "#e8f5e9";
+          setTimeout(() => {
+            linkInput.style.backgroundColor = "";
+          }, 2000);
+          
+          // إظهار رسالة نجاح
+          alert('تم إنشاء رابط الاجتماع بنجاح!\n\nالرابط: ' + meetingLink);
+          
+          if (originalBtn) {
+            originalBtn.disabled = false;
+            originalBtn.textContent = originalText;
+          }
+          return;
+        } else {
+          throw new Error('لم يتم إنشاء رابط الاجتماع');
+        }
+      } catch (apiError) {
+        console.error('Google API error:', apiError);
+        // إذا فشل API، استخدم الطريقة البديلة
+        throw apiError;
+      }
+    } else {
+      throw new Error('Google API غير متاح');
+    }
+  } catch (error) {
+    console.error('Error creating meeting link:', error);
+    console.error('Error message:', error.message);
+    
+    // في حالة الفشل، افتح Google Calendar لإنشاء الاجتماع يدوياً
+    const dateTime = new Date(`${date}T${time}`);
+    const googleCalendarUrl = createGoogleCalendarLink(dateTime, companyName);
+    const calendarWindow = window.open(googleCalendarUrl, '_blank');
+    
+    if (calendarWindow) {
+      alert('تم فتح Google Calendar لإنشاء الاجتماع.\n\nبعد إنشاء الاجتماع:\n1. انسخ رابط Google Meet من الحدث\n2. الصق الرابط في حقل "رابط الاجتماع"\n\nخطأ API: ' + error.message);
+      linkInput.placeholder = "انسخ رابط الاجتماع من Google Calendar والصقه هنا";
+      linkInput.focus();
+    } else {
+      alert('يرجى السماح بفتح النوافذ المنبثقة لإنشاء الاجتماع\n\nخطأ: ' + error.message);
+    }
+  } finally {
+    if (originalBtn) {
+      originalBtn.disabled = false;
+      originalBtn.textContent = originalText;
+    }
+  }
+}
+
+// دالة لإنشاء رابط Google Meet باستخدام Google Calendar API
+async function generateGoogleMeetLink(date, time, title) {
+  // دمج التاريخ والوقت
+  const dateTime = new Date(`${date}T${time}`);
+  const endDateTime = new Date(dateTime);
+  endDateTime.setHours(endDateTime.getHours() + 1); // اجتماع لمدة ساعة
+  
+  // التحقق من وجود Google API Client
+  if (typeof gapi === 'undefined' || !gapi.client) {
+    throw new Error('Google API غير متاح - سيتم فتح Google Calendar');
+  }
+  
+  // التحقق من تحميل Calendar API
+  if (!gapi.client.calendar) {
+    await gapi.client.load('calendar', 'v3');
+  }
+  
+  try {
+    // استخدام Google Calendar API لإنشاء حدث مع Google Meet
+    const event = {
+      summary: title,
+      description: `اجتماع مع ${title}`,
+      start: {
+        dateTime: dateTime.toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      },
+      end: {
+        dateTime: endDateTime.toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      },
+      conferenceData: {
+        createRequest: {
+          requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          conferenceSolutionKey: {
+            type: 'hangoutsMeet'
+          }
+        }
+      }
+    };
+    
+    console.log('Creating calendar event with Google Meet...');
+    const response = await gapi.client.calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      conferenceDataVersion: 1
+    });
+    
+    console.log('Calendar event created:', response);
+    
+    // استخراج رابط Google Meet
+    if (response.result) {
+      // طريقة 1: من conferenceData
+      if (response.result.conferenceData && response.result.conferenceData.entryPoints) {
+        const meetLink = response.result.conferenceData.entryPoints.find(
+          ep => ep.entryPointType === 'video'
+        );
+        if (meetLink && meetLink.uri) {
+          console.log('Google Meet link found:', meetLink.uri);
+          return meetLink.uri;
+        }
+      }
+      
+      // طريقة 2: من hangoutLink (للتوافق مع الإصدارات القديمة)
+      if (response.result.hangoutLink) {
+        console.log('Google Meet link found (hangoutLink):', response.result.hangoutLink);
+        return response.result.hangoutLink;
+      }
+      
+      // طريقة 3: من location
+      if (response.result.location && response.result.location.includes('meet.google.com')) {
+        console.log('Google Meet link found (location):', response.result.location);
+        return response.result.location;
+      }
+    }
+    
+    throw new Error('لم يتم إنشاء رابط الاجتماع في الاستجابة');
+  } catch (error) {
+    console.error('Error creating Google Meet link via API:', error);
+    console.error('Error details:', error.message, error.stack);
+    throw error;
+  }
+}
+
+// دالة لإنشاء معرف اجتماع فريد
+function generateMeetingId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const nums = '0123456789';
+  const allChars = chars + nums;
+  
+  let meetingId = '';
+  for (let i = 0; i < 12; i++) {
+    meetingId += allChars.charAt(Math.floor(Math.random() * allChars.length));
+  }
+  
+  return meetingId.match(/.{1,3}/g).join('-');
+}
+
+// دالة لإنشاء رابط Google Calendar مع تفعيل Google Meet
+function createGoogleCalendarLink(dateTime, title) {
+  const endDateTime = new Date(dateTime);
+  endDateTime.setHours(endDateTime.getHours() + 1);
+  
+  const formatForCalendar = (dt) => {
+    const year = dt.getFullYear();
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    const hours = String(dt.getHours()).padStart(2, '0');
+    const minutes = String(dt.getMinutes()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}00`;
+  };
+  
+  const start = formatForCalendar(dateTime);
+  const end = formatForCalendar(endDateTime);
+  
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${start}/${end}`,
+    details: `اجتماع مع ${title}`,
+    add: 'meet' // هذا يضيف رابط Google Meet تلقائياً
+  });
+  
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+// إعداد إنشاء رابط الاجتماع تلقائياً عند تحديد التاريخ والوقت
+// تم إزالة هذه الوظيفة لأن الروابط الوهمية لا تعمل
+// يتم استخدام زر "إنشاء اجتماع جديد" بدلاً منها
+function setupMeetingLinkAutoGeneration() {
+  // لا حاجة لإنشاء روابط وهمية - المستخدم سيستخدم زر "إنشاء اجتماع جديد"
+  // أو سيدخل الرابط يدوياً
 }
 
 async function openMeetingDetailsForLead(leadId) {
@@ -3857,6 +4272,9 @@ async function openMeetingDetailsForMyMeeting(meetingId) {
     document.getElementById("meetingLinkInput").style.pointerEvents = "auto";
     document.getElementById("meetingNotesInput").style.pointerEvents = "auto";
     document.getElementById("saveMeetingDetailsBtn").style.pointerEvents = "auto";
+    
+    // إعداد إنشاء رابط الاجتماع تلقائياً (للتعديل أيضاً)
+    setupMeetingLinkAutoGeneration();
   }
   
   modal.style.display = "block";
@@ -3877,10 +4295,7 @@ async function saveMeetingDetails() {
     alert("يرجى تحديد تاريخ ووقت الاجتماع.");
     return;
   }
-  if (!linkVal) {
-    alert("يرجى إدخال رابط الاجتماع.");
-    return;
-  }
+  // رابط الاجتماع أصبح اختياري - لا يوجد تحقق إلزامي
 
   const scheduledIso = new Date(`${dateVal}T${timeVal}`).toISOString();
 
@@ -4119,11 +4534,20 @@ async function registerNewMeetingFromFailed(meetingId) {
     adminFields.style.display = "none";
   }
   
-  // إخفاء حقل ملاحظات الاجتماع
+  // إظهار حقل ملاحظات الاجتماع
   const notesContainer = document.getElementById("meetingNotesContainer");
   if (notesContainer) {
-    notesContainer.style.display = "none";
+    notesContainer.style.display = "block";
   }
+  
+  // إخفاء خيار تحويل الميتنج للموظف نفسه
+  const assignToSelfContainer = document.getElementById("assignToSelfContainer");
+  if (assignToSelfContainer) {
+    assignToSelfContainer.style.display = "none";
+  }
+  
+  // إعداد إنشاء رابط الاجتماع تلقائياً
+  setupMeetingLinkAutoGeneration();
   
   modal.style.display = "block";
 }
@@ -4894,6 +5318,12 @@ function calculateKPIs(leads, meetings) {
   }).length;
   const kpi4 = respondedLeads > 0 ? ((leadsWithMeetings / respondedLeads) * 100).toFixed(2) : 0;
   
+  // KPI 5: معدل التحويل للتعاقد (Contract Conversion Rate)
+  // استبعاد الاجتماعات الملغاة
+  const relevantMeetings = meetings.filter(m => m.status !== "cancelled" && m.status !== "ملغى");
+  const contractedMeetings = relevantMeetings.filter(m => m.conversion === "funded").length;
+  const kpi5 = relevantMeetings.length > 0 ? ((contractedMeetings / relevantMeetings.length) * 100).toFixed(2) : 0;
+  
   // KPI 6: التعاقدات (العدد) - Meetings where conversion = 'funded'
   const kpi6 = meetings.filter(m => m.conversion === "funded").length;
   
@@ -4902,12 +5332,17 @@ function calculateKPIs(leads, meetings) {
   const totalPrice = fundedMeetings.reduce((sum, m) => sum + (parseFloat(m.price) || 0), 0);
   const kpi7 = kpi6 > 0 ? (totalPrice / kpi6).toFixed(2) : 0;
   
-  // KPI 8: إجمالي الاجتماعات المجدولة
-  const kpi8 = meetings.filter(m => m.scheduledAt).length;
+  // KPI 8: نسبة الاجتماعات التي تم دخولها ولم يتم التعاقد
+  // (status = "done" AND conversion = "unfunded") / إجمالي الاجتماعات
+  const totalMeetings = meetings.length;
+  const meetingsDoneUnfunded = meetings.filter(m => m.status === "done" && (m.conversion === "unfunded" || !m.conversion)).length;
+  const kpi8 = totalMeetings > 0 ? ((meetingsDoneUnfunded / totalMeetings) * 100).toFixed(2) : 0;
   
   // KPI 9: نسبة حضور الاجتماعات
+  // نحتاج إجمالي الاجتماعات المجدولة لحساب KPI 9
+  const scheduledMeetings = meetings.filter(m => m.scheduledAt).length;
   const attendedMeetings = meetings.filter(m => m.status === "done").length;
-  const kpi9 = kpi8 > 0 ? ((attendedMeetings / kpi8) * 100).toFixed(2) : 0;
+  const kpi9 = scheduledMeetings > 0 ? ((attendedMeetings / scheduledMeetings) * 100).toFixed(2) : 0;
   
   // KPI 10: عملاء احتاجوا Second Meeting (Leads with more than one meeting)
   const leadMeetingCounts = {};
@@ -4919,7 +5354,7 @@ function calculateKPIs(leads, meetings) {
   const kpi10 = Object.values(leadMeetingCounts).filter(count => count > 1).length;
   
   // KPI 11: نسبة الاجتماعات المنتهية (Meetings with status 'done' out of all meetings)
-  const totalMeetings = meetings.length;
+  // totalMeetings تم تعريفه أعلاه
   const kpi11 = totalMeetings > 0 ? ((attendedMeetings / totalMeetings) * 100).toFixed(2) : 0;
   
   // KPI 12: متوسط عدد الاجتماعات قبل الإنهاء (Average meetings per lead before conversion)
@@ -4935,10 +5370,10 @@ function calculateKPIs(leads, meetings) {
   const kpi13 = totalPrice.toFixed(2);
   
   return {
-    kpi1, kpi2, kpi3, kpi4, kpi6, kpi7, kpi8, kpi9, kpi10, kpi11, kpi12, kpi13,
+    kpi1, kpi2, kpi3, kpi4, kpi5, kpi6, kpi7, kpi8, kpi9, kpi10, kpi11, kpi12, kpi13,
     totalLeads: leads.length,
     respondedLeads,
-    scheduledMeetings: kpi8,
+    scheduledMeetings: scheduledMeetings,
     attendedMeetings,
     fundedMeetings: kpi6,
     totalPrice
@@ -4946,67 +5381,55 @@ function calculateKPIs(leads, meetings) {
 }
 
 function displayKPIs(kpis, previousKPIs = null) {
-  // KPI 1
-  document.getElementById("kpi1").textContent = kpis.kpi1.toLocaleString();
-  if (previousKPIs) {
-    const change = kpis.kpi1 - previousKPIs.kpi1;
-    const percentChange = previousKPIs.kpi1 > 0 ? ((change / previousKPIs.kpi1) * 100).toFixed(1) : 0;
-    const trendEl = document.getElementById("kpi1Trend");
-    trendEl.innerHTML = `
-      <span>MoM:</span>
-      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
-        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
-      </span>
-    `;
-  }
-  
   // KPI 6
-  document.getElementById("kpi6").textContent = kpis.kpi6.toLocaleString();
-  if (previousKPIs) {
-    const change = kpis.kpi6 - previousKPIs.kpi6;
-    const percentChange = previousKPIs.kpi6 > 0 ? ((change / previousKPIs.kpi6) * 100).toFixed(1) : 0;
-    const trendEl = document.getElementById("kpi6Trend");
-    trendEl.innerHTML = `
-      <span>MoM:</span>
-      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
-        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
-      </span>
-    `;
+  const kpi6El = document.getElementById("kpi6");
+  if (kpi6El) {
+    kpi6El.textContent = kpis.kpi6.toLocaleString();
+    if (previousKPIs) {
+      const change = kpis.kpi6 - previousKPIs.kpi6;
+      const percentChange = previousKPIs.kpi6 > 0 ? ((change / previousKPIs.kpi6) * 100).toFixed(1) : 0;
+      const trendEl = document.getElementById("kpi6Trend");
+      if (trendEl) {
+        trendEl.innerHTML = `
+          <span>MoM:</span>
+          <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+            ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+          </span>
+        `;
+      }
+    }
   }
   
   // KPI 13
-  document.getElementById("kpi13").textContent = `${parseFloat(kpis.kpi13).toLocaleString()} ر.س`;
-  if (previousKPIs) {
-    const change = parseFloat(kpis.kpi13) - parseFloat(previousKPIs.kpi13);
-    const percentChange = parseFloat(previousKPIs.kpi13) > 0 ? ((change / parseFloat(previousKPIs.kpi13)) * 100).toFixed(1) : 0;
-    const trendEl = document.getElementById("kpi13Trend");
-    trendEl.innerHTML = `
-      <span>MoM:</span>
-      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
-        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
-      </span>
-    `;
+  const kpi13El = document.getElementById("kpi13");
+  if (kpi13El) {
+    kpi13El.textContent = `${parseFloat(kpis.kpi13).toLocaleString()} ر.س`;
+    if (previousKPIs) {
+      const change = parseFloat(kpis.kpi13) - parseFloat(previousKPIs.kpi13);
+      const percentChange = parseFloat(previousKPIs.kpi13) > 0 ? ((change / parseFloat(previousKPIs.kpi13)) * 100).toFixed(1) : 0;
+      const trendEl = document.getElementById("kpi13Trend");
+      if (trendEl) {
+        trendEl.innerHTML = `
+          <span>MoM:</span>
+          <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
+            ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
+          </span>
+        `;
+      }
+    }
   }
   
-  // KPI 7
-  document.getElementById("kpi7").textContent = `${parseFloat(kpis.kpi7).toLocaleString()} ر.س`;
-  if (previousKPIs) {
-    const change = parseFloat(kpis.kpi7) - parseFloat(previousKPIs.kpi7);
-    const percentChange = parseFloat(previousKPIs.kpi7) > 0 ? ((change / parseFloat(previousKPIs.kpi7)) * 100).toFixed(1) : 0;
-    const trendEl = document.getElementById("kpi7Trend");
-    trendEl.innerHTML = `
-      <span>MoM:</span>
-      <span style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: 700;">
-        ${change >= 0 ? '↑' : '↓'} ${Math.abs(percentChange)}%
-      </span>
-    `;
+  // KPI 4: معدل التحويل إلى الاجتماع
+  const kpi4El = document.getElementById("kpi4");
+  if (kpi4El) {
+    kpi4El.textContent = `${kpis.kpi4}%`;
   }
   
-  // KPI 3
-  document.getElementById("kpi3").textContent = `${kpis.kpi3}%`;
-  
-  // KPI 9
-  document.getElementById("kpi9").textContent = `${kpis.kpi9}%`;
+  // KPI 5: معدل التحويل للتعاقد
+  const kpi5El = document.getElementById("kpi5");
+  if (kpi5El) {
+    kpi5El.textContent = `${kpis.kpi5}%`;
+  }
 }
 
 function createFunnelChart(leads, meetings) {
@@ -5096,8 +5519,11 @@ function createConversionByTypeChart(leads, meetings) {
   const types = ['hot', 'cold', 'hunt'];
   const typeLabels = { 'hot': 'Hot', 'cold': 'Cold', 'hunt': 'Hunt' };
   
+  // إعداد البيانات بنفس هيكل kpi5_finalChartData
+  const kpi5_finalChartData = [];
   const bookedData = [];
   const failedData = [];
+  const totalData = [];
   const conversionRates = [];
   
   types.forEach(type => {
@@ -5113,11 +5539,26 @@ function createConversionByTypeChart(leads, meetings) {
     
     // فشل التأهيل: attempted but did not result in booked meeting
     const failed = attempted.length - booked;
+    const total = attempted.length;
+    const conversionRate = total > 0 ? ((booked / total) * 100).toFixed(1) : 0;
+    
+    kpi5_finalChartData.push({
+      type: typeLabels[type],
+      'اجتماع محجوز': booked,
+      'فشل التأهيل/مفقود': failed,
+      'الإجمالي': total
+    });
     
     bookedData.push(booked);
     failedData.push(failed);
-    conversionRates.push(attempted.length > 0 ? ((booked / attempted.length) * 100).toFixed(1) : 0);
+    totalData.push(total);
+    conversionRates.push(conversionRate);
   });
+  
+  // دالة مساعدة لتنسيق الأرقام
+  const formatNumber = (value) => {
+    return new Intl.NumberFormat('ar-SA').format(value);
+  };
   
   if (conversionByTypeChart) {
     conversionByTypeChart.destroy();
@@ -5131,38 +5572,124 @@ function createConversionByTypeChart(leads, meetings) {
         {
           label: 'اجتماع محجوز',
           data: bookedData,
-          backgroundColor: 'rgba(16, 185, 129, 0.8)',
-          borderColor: 'rgba(16, 185, 129, 1)',
-          borderWidth: 2
+          backgroundColor: '#10b981', // Tailwind green-600
+          borderColor: '#10b981',
+          borderWidth: 0,
+          borderRadius: {
+            topLeft: 10,
+            topRight: 10,
+            bottomLeft: 0,
+            bottomRight: 0
+          }
         },
         {
           label: 'فشل التأهيل/مفقود',
           data: failedData,
-          backgroundColor: 'rgba(239, 68, 68, 0.8)',
-          borderColor: 'rgba(239, 68, 68, 1)',
-          borderWidth: 2
+          backgroundColor: '#fca5a5', // Tailwind red-300
+          borderColor: '#fca5a5',
+          borderWidth: 0,
+          borderRadius: {
+            topLeft: 10,
+            topRight: 10,
+            bottomLeft: 0,
+            bottomRight: 0
+          }
         }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          top: 10,
+          bottom: 10
+        }
+      },
       plugins: {
         legend: {
-          position: 'top',
+          position: 'bottom',
+          align: 'center',
+          labels: {
+            usePointStyle: true,
+            padding: 15,
+            font: {
+              size: 12
+            },
+            textDirection: 'rtl'
+          }
         },
         tooltip: {
+          enabled: true,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          padding: 12,
+          titleFont: {
+            size: 14,
+            weight: 'bold'
+          },
+          bodyFont: {
+            size: 12
+          },
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          borderWidth: 1,
+          cornerRadius: 8,
+          displayColors: false,
           callbacks: {
-            afterLabel: function(context) {
+            title: function(context) {
+              const index = context[0].dataIndex;
+              return `نوع العميل: ${kpi5_finalChartData[index].type}`;
+            },
+            label: function(context) {
               const index = context.dataIndex;
-              return `نسبة التحويل: ${conversionRates[index]}%`;
+              const data = kpi5_finalChartData[index];
+              const booked = data['اجتماع محجوز'];
+              const failed = data['فشل التأهيل/مفقود'];
+              const total = data['الإجمالي'];
+              const conversionRate = conversionRates[index];
+              
+              // عرض التلميحة عند المرور على أي عمود
+              return [
+                `إجمالي محاولات المكالمات: ${formatNumber(total)}`,
+                '─────────────────────',
+                `اجتماعات محجوزة: ${formatNumber(booked)}`,
+                `مفقود / فشل: ${formatNumber(failed)}`,
+                '',
+                `نسبة التحويل (مكالمة إلى اجتماع): ${conversionRate}%`
+              ];
+            },
+            afterLabel: function(context) {
+              return '';
             }
           }
         }
       },
       scales: {
+        x: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            color: '#374151', // رمادي داكن
+            font: {
+              size: 12
+            }
+          }
+        },
         y: {
-          beginAtZero: true
+          beginAtZero: true,
+          position: 'right', // المحور الرأسي على اليمين
+          grid: {
+            color: 'rgba(0, 0, 0, 0.1)',
+            drawBorder: false,
+            lineWidth: 1,
+            borderDash: [3, 3] // خط متقطع
+          },
+          ticks: {
+            color: '#374151',
+            font: {
+              size: 11
+            }
+          }
         }
       }
     }
@@ -5260,12 +5787,12 @@ async function createKPIMonthlyTable(selectedMonth = "all") {
       <td>${kpis.kpi2.toLocaleString()}</td>
       <td>${kpis.kpi3}%</td>
       <td>${kpis.kpi4}%</td>
+      <td>${kpis.kpi5}%</td>
       <td>${kpis.kpi6.toLocaleString()}</td>
       <td>${parseFloat(kpis.kpi7).toLocaleString()} ر.س</td>
-      <td>${kpis.kpi8.toLocaleString()}</td>
+      <td>${kpis.kpi8}%</td>
       <td>${kpis.kpi9}%</td>
       <td>${kpis.kpi10.toLocaleString()}</td>
-      <td>${kpis.kpi11}%</td>
       <td>${kpis.kpi12}</td>
       <td style="font-weight: 700; color: #27ae60;">${parseFloat(kpis.kpi13).toLocaleString()} ر.س</td>
     `;
