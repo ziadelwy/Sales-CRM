@@ -4054,7 +4054,7 @@ async function viewMeetingDetails(meetingId, hidePrice = false) {
     <p><strong>دخول الاجتماع:</strong> ${statusText}${lockedText}</p>
     <p><strong>${conversionLabel}:</strong> ${conversionText}</p>
     ${!hidePrice && meeting.conversion === "funded" ? `<p><strong>سعر التمويل:</strong> ${priceText}</p>` : ""}
-    <p><strong>ملاحظات التلي سيلز:</strong> ${meeting.telesalesNotes ? escapeHtml(meeting.telesalesNotes) : "لا توجد"}</p>
+    <p><strong>بريف التلي سيلز:</strong> ${meeting.telesalesNotes ? escapeHtml(meeting.telesalesNotes) : "لا توجد"}</p>
     <p><strong>ملاحظات الاجتماع:</strong> ${meeting.notes ? escapeHtml(meeting.notes) : "لا توجد"}</p>
     <p><strong>تم التحويل بواسطة:</strong> ${meeting.createdBy || "-"}</p>
     <p><strong>الموظف المتابع:</strong> ${meeting.assignedTo || "-"}</p>
